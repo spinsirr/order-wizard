@@ -14,7 +14,6 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { useSafeAuth } from '@/hooks/useSafeAuth';
 import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
 import { useOrderUIStore, filterAndSortOrders, exportOrdersToCSV } from '@/store/orderStore';
 import type { OrderSortOption, StatusFilter } from '@/store/orderStore';
@@ -88,26 +87,14 @@ type ConfirmData =
   | { type: 'bulk'; orderIds: string[]; message: string };
 
 export function OrderTable() {
-  const auth = useSafeAuth();
-  const profile = auth?.user?.profile;
-  const resolvedUserId =
-    profile?.sub ?? (typeof profile?.email === 'string' ? profile.email : null);
-
   // TanStack Query hooks
   const { data: orders = [], isLoading } = useOrders();
   const updateStatusMutation = useUpdateOrderStatus();
   const deleteOrdersMutation = useDeleteOrders();
 
   // UI state from Zustand
-  const {
-    searchQuery,
-    statusFilter,
-    sortOption,
-    setSearchQuery,
-    setStatusFilter,
-    setSortOption,
-    setCurrentUserId,
-  } = useOrderUIStore();
+  const { searchQuery, statusFilter, sortOption, setSearchQuery, setStatusFilter, setSortOption } =
+    useOrderUIStore();
 
   // Local UI state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -119,17 +106,6 @@ export function OrderTable() {
     () => filterAndSortOrders(orders, searchQuery, statusFilter, sortOption),
     [orders, searchQuery, statusFilter, sortOption]
   );
-
-  // Set user ID when auth changes
-  useEffect(() => {
-    if (!auth || auth.isLoading) return;
-
-    if (!auth.isAuthenticated || !auth.user?.access_token) {
-      setCurrentUserId(null);
-    } else {
-      setCurrentUserId(resolvedUserId);
-    }
-  }, [auth, resolvedUserId, setCurrentUserId]);
 
   // Clean up selected IDs when orders change (remove IDs that no longer exist)
   useEffect(() => {

@@ -287,9 +287,14 @@ export class ApiRepository {
 }
 
 // ============================================================================
-// Repository Instance
+// Repository Instances
 // ============================================================================
 
-export const orderRepository = apiBaseUrl
-  ? new ApiRepository(apiBaseUrl)
-  : new LocalStorageRepository();
+// Local storage - always available, works without login
+export const localRepository = new LocalStorageRepository();
+
+// API repository - for cloud sync when authenticated
+export const apiRepository = apiBaseUrl ? new ApiRepository(apiBaseUrl) : null;
+
+// Default to local storage (backward compatible)
+export const orderRepository = localRepository;
