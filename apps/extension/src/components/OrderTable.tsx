@@ -7,7 +7,6 @@ import {
   ClipboardList,
   Download,
   Eye,
-  LogIn,
   Minus,
   MessageCircle,
   Package,
@@ -16,7 +15,6 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useSafeAuth } from '@/hooks/useSafeAuth';
-import { useOAuthContext } from '@/OAuthContext';
 import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
 import { useOrderUIStore, filterAndSortOrders, exportOrdersToCSV } from '@/store/orderStore';
 import type { OrderSortOption, StatusFilter } from '@/store/orderStore';
@@ -91,7 +89,6 @@ type ConfirmData =
 
 export function OrderTable() {
   const auth = useSafeAuth();
-  const { discoverAndLogin } = useOAuthContext();
   const profile = auth?.user?.profile;
   const resolvedUserId =
     profile?.sub ?? (typeof profile?.email === 'string' ? profile.email : null);
@@ -216,23 +213,6 @@ export function OrderTable() {
       return next;
     });
   };
-
-  // Show login prompt when not authenticated
-  if (!auth || !auth.isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center">
-        <LogIn className="mb-4 h-12 w-12 text-muted-foreground" aria-hidden="true" />
-        <div className="mb-2 text-lg font-semibold">Sign in to view your orders</div>
-        <p className="max-w-sm text-sm text-muted-foreground mb-4">
-          Connect your account to sync and manage your Amazon orders across devices.
-        </p>
-        <Button onClick={() => void discoverAndLogin()} size="sm">
-          <LogIn className="h-4 w-4 mr-2" aria-hidden="true" />
-          Sign In
-        </Button>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (

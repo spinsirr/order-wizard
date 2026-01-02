@@ -5,18 +5,18 @@ import { useOAuthContext } from '@/OAuthContext';
 import { useAccessToken } from '@/hooks/useAccessToken';
 
 export function UserBar() {
-  const { config, isConfigured, discoverAndLogin } = useOAuthContext();
+  const { config, isConfigured, discover } = useOAuthContext();
 
   // useAuth throws if not inside AuthProvider, so we need to handle that
   // When config is null, there's no AuthProvider
   if (!isConfigured) {
-    return <UserBarUnconfigured onSignIn={discoverAndLogin} />;
+    return <UserBarUnconfigured onSignIn={discover} />;
   }
 
   return <UserBarConfigured oauthConfig={config!} />;
 }
 
-function UserBarUnconfigured({ onSignIn }: { onSignIn: () => Promise<void> }) {
+function UserBarUnconfigured({ onSignIn }: { onSignIn: () => Promise<unknown> }) {
   return (
     <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
       <div className="flex w-full items-center px-6 py-5 min-h-[96px]">
