@@ -10,7 +10,7 @@
     "lint:fix": "biome lint --write",
     "format": "biome format --write",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo",
+    "clean": "rm -rf dist",
     "preview": "vite preview"
   },
   "dependencies": {
