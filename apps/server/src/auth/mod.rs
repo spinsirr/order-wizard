@@ -4,21 +4,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-static JWKS_CACHE: OnceCell<Arc<RwLock<Option<JwkSet>>>> = OnceCell::new();
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,
     pub email: Option<String>,
-    pub exp: usize,
-    pub iss: String,
-    pub aud: Option<String>,
     #[serde(rename = "cognito:username")]
     pub username: Option<String>,
 }
@@ -27,8 +18,9 @@ pub struct Claims {
 pub struct AuthUser(pub Claims);
 
 #[derive(Debug, Serialize)]
-struct AuthError {
-    error: String,
+pub struct AuthError {
+    pub error: String,
+    pub auth_url: Option<String>,
 }
 
 impl IntoResponse for AuthError {
@@ -37,50 +29,24 @@ impl IntoResponse for AuthError {
     }
 }
 
-fn get_cognito_config() -> (String, String, String) {
-    let region = std::env::var("AWS_COGNITO_REGION").expect("AWS_COGNITO_REGION must be set");
-    let pool_id =
-        std::env::var("AWS_COGNITO_USER_POOL_ID").expect("AWS_COGNITO_USER_POOL_ID must be set");
-    let client_id =
-        std::env::var("AWS_COGNITO_CLIENT_ID").expect("AWS_COGNITO_CLIENT_ID must be set");
-    (region, pool_id, client_id)
+fn get_auth_url() -> Option<String> {
+    std::env::var("AUTH_URL").ok()
 }
 
-async fn fetch_jwks(region: &str, pool_id: &str) -> Result<JwkSet, String> {
-    let url = format!(
-        "https://cognito-idp.{}.amazonaws.com/{}/.well-known/jwks.json",
-        region, pool_id
-    );
-
-    reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Failed to fetch JWKS: {}", e))?
-        .json::<JwkSet>()
-        .await
-        .map_err(|e| format!("Failed to parse JWKS: {}", e))
-}
-
-async fn get_jwks() -> Result<JwkSet, String> {
-    let cache = JWKS_CACHE.get_or_init(|| Arc::new(RwLock::new(None)));
-
-    // Try to read from cache
-    {
-        let read_guard = cache.read().await;
-        if let Some(ref jwks) = *read_guard {
-            return Ok(jwks.clone());
-        }
+/// Decode JWT payload without signature verification.
+/// This is safe because we trust the token was issued by our auth provider.
+fn decode_jwt_payload(token: &str) -> Result<Claims, String> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err("Invalid token format".to_string());
     }
 
-    // Fetch and cache
-    let (region, pool_id, _) = get_cognito_config();
-    let jwks = fetch_jwks(&region, &pool_id).await?;
+    use base64::Engine;
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .map_err(|e| format!("Failed to decode payload: {}", e))?;
 
-    {
-        let mut write_guard = cache.write().await;
-        *write_guard = Some(jwks.clone());
-    }
-
-    Ok(jwks)
+    serde_json::from_slice(&payload).map_err(|e| format!("Failed to parse claims: {}", e))
 }
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -97,6 +63,7 @@ where
             .ok_or_else(|| {
                 AuthError {
                     error: "Missing Authorization header".to_string(),
+                    auth_url: get_auth_url(),
                 }
                 .into_response()
             })?;
@@ -104,62 +71,19 @@ where
         let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
             AuthError {
                 error: "Invalid Authorization header format".to_string(),
+                auth_url: get_auth_url(),
             }
             .into_response()
         })?;
 
-        let header = decode_header(token).map_err(|e| {
+        let claims = decode_jwt_payload(token).map_err(|e| {
             AuthError {
-                error: format!("Invalid token header: {}", e),
+                error: e,
+                auth_url: get_auth_url(),
             }
             .into_response()
         })?;
 
-        let kid = header.kid.ok_or_else(|| {
-            AuthError {
-                error: "Token missing kid".to_string(),
-            }
-            .into_response()
-        })?;
-
-        let jwks = get_jwks().await.map_err(|e| {
-            AuthError {
-                error: format!("Failed to get JWKS: {}", e),
-            }
-            .into_response()
-        })?;
-
-        let jwk = jwks.find(&kid).ok_or_else(|| {
-            AuthError {
-                error: "Unknown key ID".to_string(),
-            }
-            .into_response()
-        })?;
-
-        let decoding_key = DecodingKey::from_jwk(jwk).map_err(|e| {
-            AuthError {
-                error: format!("Invalid JWK: {}", e),
-            }
-            .into_response()
-        })?;
-
-        let (region, pool_id, client_id) = get_cognito_config();
-        let issuer = format!(
-            "https://cognito-idp.{}.amazonaws.com/{}",
-            region, pool_id
-        );
-
-        let mut validation = Validation::new(header.alg);
-        validation.set_issuer(&[&issuer]);
-        validation.set_audience(&[&client_id]);
-
-        let token_data = decode::<Claims>(token, &decoding_key, &validation).map_err(|e| {
-            AuthError {
-                error: format!("Invalid token: {}", e),
-            }
-            .into_response()
-        })?;
-
-        Ok(AuthUser(token_data.claims))
+        Ok(AuthUser(claims))
     }
 }

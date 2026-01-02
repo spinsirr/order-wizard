@@ -1,0 +1,25 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: order_wizard
+
+  server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongo:27017
+      - AWS_COGNITO_REGION=${AWS_COGNITO_REGION}
+      - AWS_COGNITO_USER_POOL_ID=${AWS_COGNITO_USER_POOL_ID}
+      - AWS_COGNITO_CLIENT_ID=${AWS_COGNITO_CLIENT_ID}
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

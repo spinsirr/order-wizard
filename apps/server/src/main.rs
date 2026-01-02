@@ -1,4 +1,7 @@
 mod auth;
+mod db;
+mod models;
+mod routes;
 
 use auth::AuthUser;
 use axum::{routing::get, Json, Router};
@@ -37,6 +40,12 @@ async fn main() {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    // Initialize database
+    if let Err(e) = db::init_db().await {
+        tracing::error!("Failed to connect to MongoDB: {}", e);
+        std::process::exit(1);
+    }
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -45,6 +54,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/me", get(me))
+        .merge(routes::orders::router())
         .layer(cors);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
