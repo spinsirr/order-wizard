@@ -1,9 +1,49 @@
 import { useMemo } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { buildCognitoLogoutUrl } from '@/config';
+import { useOAuthContext } from '@/OAuthContext';
 import { useAccessToken } from '@/hooks/useAccessToken';
 
 export function UserBar() {
+  const { config, isConfigured, discoverAndLogin } = useOAuthContext();
+
+  // useAuth throws if not inside AuthProvider, so we need to handle that
+  // When config is null, there's no AuthProvider
+  if (!isConfigured) {
+    return <UserBarUnconfigured onSignIn={discoverAndLogin} />;
+  }
+
+  return <UserBarConfigured oauthConfig={config!} />;
+}
+
+function UserBarUnconfigured({ onSignIn }: { onSignIn: () => Promise<void> }) {
+  return (
+    <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
+      <div className="flex w-full items-center px-6 py-5 min-h-[96px]">
+        <div className="flex w-full items-center justify-between">
+          <span className="text-sm text-muted-foreground md:text-base">
+            Sign in to sync your orders across devices.
+          </span>
+          <button
+            type="button"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+            onClick={() => void onSignIn()}
+          >
+            Sign in
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+interface OAuthConfig {
+  authority: string;
+  clientId: string;
+  scopes: string[];
+}
+
+function UserBarConfigured({ oauthConfig }: { oauthConfig: OAuthConfig }) {
   const auth = useAuth();
   const profile = auth.user?.profile;
   useAccessToken();
@@ -37,7 +77,7 @@ export function UserBar() {
     } catch {
       // ignore remove user errors and continue logout
     }
-    const logoutUrl = buildCognitoLogoutUrl();
+    const logoutUrl = buildCognitoLogoutUrl(oauthConfig);
     if (logoutUrl) {
       window.location.href = logoutUrl;
       return;

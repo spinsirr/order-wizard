@@ -1,5 +1,13 @@
-# Run all dev servers in parallel
-dev:
+# Start MongoDB
+db:
+    docker-compose up -d mongodb
+
+# Stop MongoDB
+db-stop:
+    docker-compose down
+
+# Run all dev servers in parallel (starts MongoDB first)
+dev: db
     just dev-extension &
     just dev-server &
     wait

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderStatus {
     Uncommented,
@@ -9,22 +10,35 @@ pub enum OrderStatus {
     Reimbursed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
+    /// Unique order identifier
     pub id: String,
+    /// Owner's user ID
     pub user_id: String,
+    /// Amazon order number
+    #[schema(example = "123-4567890-1234567")]
     pub order_number: String,
+    /// Product name
+    #[schema(example = "Wireless Bluetooth Headphones")]
     pub product_name: String,
+    /// Order date as displayed on Amazon
+    #[schema(example = "December 25, 2024")]
     pub order_date: String,
+    /// Product image URL
     pub product_image: String,
+    /// Order total price
+    #[schema(example = "$29.99")]
     pub price: String,
+    /// Current status of the order
     pub status: OrderStatus,
+    /// Optional user note
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderRequest {
     pub id: String,
@@ -38,11 +52,9 @@ pub struct CreateOrderRequest {
     pub note: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateOrderRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<OrderStatus>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }

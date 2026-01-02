@@ -5,34 +5,22 @@ import {
   type NavigateResponse,
   UserManager,
   type UserManagerSettings,
-  WebStorageStateStore,
 } from 'oidc-client-ts';
 import type { AuthProviderProps } from 'react-oidc-context';
 import type { Order } from './types';
+import type { OAuthConfig } from './oauth-discovery';
 
 // ============================================================================
 // Environment Variables
 // ============================================================================
 
-const authority = import.meta.env.VITE_COGNITO_AUTHORITY ?? '';
-const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID ?? '';
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
 // ============================================================================
-// Auth Configuration
+// Chrome Extension Detection
 // ============================================================================
 
-function deriveCognitoDomain(authority: string): string {
-  const match = authority.match(/cognito-idp\.([^.]+)\.amazonaws\.com\/([^/]+)/);
-  if (!match) return '';
-  const [, region, poolId] = match;
-  const domainPrefix = poolId.toLowerCase().replace('_', '');
-  return `https://${domainPrefix}.auth.${region}.amazoncognito.com`;
-}
-
-const cognitoDomain = deriveCognitoDomain(authority);
-
-const isChromeExtension =
+export const isChromeExtension =
   typeof chrome !== 'undefined' &&
   !!chrome.identity?.getRedirectURL &&
   !!chrome.identity.launchWebAuthFlow;
@@ -40,18 +28,12 @@ const isChromeExtension =
 const extensionRedirectUri = isChromeExtension
   ? chrome.identity.getRedirectURL('oidc-callback')
   : null;
+
 const effectiveRedirectUri = extensionRedirectUri ?? window.location.origin;
 
-const baseAuthSettings: UserManagerSettings = {
-  authority,
-  client_id: clientId,
-  redirect_uri: effectiveRedirectUri,
-  response_type: 'code',
-  scope: 'openid email',
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
-  automaticSilentRenew: true,
-  silent_redirect_uri: effectiveRedirectUri,
-};
+// ============================================================================
+// Chrome Extension Auth Navigator
+// ============================================================================
 
 class ChromeExtensionRedirectWindow implements IWindow {
   async navigate(params: NavigateParams): Promise<NavigateResponse> {
@@ -83,39 +65,70 @@ class ChromeExtensionRedirectNavigator implements INavigator {
   async callback(_url: string): Promise<void> {}
 }
 
-const extensionUserManager =
-  isChromeExtension && extensionRedirectUri
-    ? new UserManager(
-        {
-          ...baseAuthSettings,
-          redirect_uri: extensionRedirectUri,
-        },
-        new ChromeExtensionRedirectNavigator(),
-      )
-    : null;
+// ============================================================================
+// Dynamic Auth Configuration Builder
+// ============================================================================
 
-export const cognitoAuthProviderProps: AuthProviderProps =
-  extensionUserManager !== null
-    ? {
+/**
+ * Derives the Cognito domain from the authority URL.
+ * This is needed for the logout URL construction.
+ */
+function deriveCognitoDomain(authority: string): string {
+  const match = authority.match(/cognito-idp\.([^.]+)\.amazonaws\.com\/([^/]+)/);
+  if (!match) return '';
+  const [, region, poolId] = match;
+  const domainPrefix = poolId.toLowerCase().replace('_', '');
+  return `https://${domainPrefix}.auth.${region}.amazoncognito.com`;
+}
+
+/**
+ * Builds the OIDC auth provider props from the discovered OAuth config.
+ *
+ * OAuth 2.1 compliance is handled by oidc-client-ts defaults:
+ * - PKCE (S256) is enabled by default for response_type: 'code'
+ * - Tokens stored in sessionStorage by default
+ * - Refresh token rotation must be enabled on the authorization server
+ */
+export function buildAuthProviderProps(oauthConfig: OAuthConfig): AuthProviderProps {
+  const baseAuthSettings: UserManagerSettings = {
+    authority: oauthConfig.authority,
+    client_id: oauthConfig.clientId,
+    redirect_uri: effectiveRedirectUri,
+    response_type: 'code',
+    scope: oauthConfig.scopes.join(' '),
+    automaticSilentRenew: true,
+    silent_redirect_uri: effectiveRedirectUri,
+  };
+
+  if (isChromeExtension && extensionRedirectUri) {
+    const extensionUserManager = new UserManager(
+      {
         ...baseAuthSettings,
-        userManager: extensionUserManager,
-      }
-    : baseAuthSettings;
+        redirect_uri: extensionRedirectUri,
+      },
+      new ChromeExtensionRedirectNavigator()
+    );
 
-export const cognitoLogoutConfig = {
-  domain: cognitoDomain,
-  clientId,
-  logoutUri: effectiveRedirectUri,
-};
+    return {
+      ...baseAuthSettings,
+      userManager: extensionUserManager,
+    };
+  }
 
-export function buildCognitoLogoutUrl(): string | null {
-  const { domain, clientId, logoutUri: target } = cognitoLogoutConfig;
-  if (!domain || !clientId || !target) {
+  return baseAuthSettings;
+}
+
+/**
+ * Builds the Cognito logout URL from the discovered OAuth config.
+ */
+export function buildCognitoLogoutUrl(oauthConfig: OAuthConfig): string | null {
+  const cognitoDomain = deriveCognitoDomain(oauthConfig.authority);
+  if (!cognitoDomain || !oauthConfig.clientId) {
     return null;
   }
-  const url = new URL(`${domain}/logout`);
-  url.searchParams.set('client_id', clientId);
-  url.searchParams.set('logout_uri', target);
+  const url = new URL(`${cognitoDomain}/logout`);
+  url.searchParams.set('client_id', oauthConfig.clientId);
+  url.searchParams.set('logout_uri', effectiveRedirectUri);
   return url.toString();
 }
 

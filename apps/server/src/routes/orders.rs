@@ -1,26 +1,33 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{delete, get, patch, post},
-    Json, Router,
-};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthError, AuthUser};
 use crate::db::orders_collection;
 use crate::models::{CreateOrderRequest, Order, UpdateOrderRequest};
 
-pub fn router() -> Router {
-    Router::new()
-        .route("/orders", get(list_orders))
-        .route("/orders", post(create_order))
-        .route("/orders/{id}", get(get_order))
-        .route("/orders/{id}", patch(update_order))
-        .route("/orders/{id}", delete(delete_order))
+pub fn router() -> OpenApiRouter {
+    OpenApiRouter::new()
+        .routes(routes!(list_orders))
+        .routes(routes!(create_order))
+        .routes(routes!(get_order))
+        .routes(routes!(update_order))
+        .routes(routes!(delete_order))
 }
 
+#[utoipa::path(
+    get,
+    path = "/orders",
+    tag = "Orders",
+    summary = "List all orders",
+    description = "Returns all orders for the authenticated user",
+    responses(
+        (status = 200, description = "List of orders", body = Vec<Order>),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
 async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let collection = orders_collection();
 
@@ -44,6 +51,19 @@ async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
     (StatusCode::OK, Json(orders))
 }
 
+#[utoipa::path(
+    post,
+    path = "/orders",
+    tag = "Orders",
+    summary = "Create a new order",
+    description = "Creates a new order for the authenticated user",
+    request_body = CreateOrderRequest,
+    responses(
+        (status = 201, description = "Order created successfully", body = Order),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
 async fn create_order(
     AuthUser(claims): AuthUser,
     Json(payload): Json<CreateOrderRequest>,
@@ -71,6 +91,22 @@ async fn create_order(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/orders/{id}",
+    tag = "Orders",
+    summary = "Get an order by ID",
+    description = "Returns a specific order by its ID",
+    params(
+        ("id" = String, Path, description = "Order ID")
+    ),
+    responses(
+        (status = 200, description = "Order found", body = Order),
+        (status = 404, description = "Order not found"),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
 async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
     let collection = orders_collection();
 
@@ -86,6 +122,24 @@ async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl I
     }
 }
 
+#[utoipa::path(
+    patch,
+    path = "/orders/{id}",
+    tag = "Orders",
+    summary = "Update an order",
+    description = "Updates an existing order's status or note",
+    params(
+        ("id" = String, Path, description = "Order ID")
+    ),
+    request_body = UpdateOrderRequest,
+    responses(
+        (status = 200, description = "Order updated successfully"),
+        (status = 400, description = "Bad request (empty update)"),
+        (status = 404, description = "Order not found"),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
 async fn update_order(
     AuthUser(claims): AuthUser,
     Path(id): Path<String>,
@@ -125,6 +179,22 @@ async fn update_order(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/orders/{id}",
+    tag = "Orders",
+    summary = "Delete an order",
+    description = "Deletes an order by its ID",
+    params(
+        ("id" = String, Path, description = "Order ID")
+    ),
+    responses(
+        (status = 204, description = "Order deleted successfully"),
+        (status = 404, description = "Order not found"),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
 async fn delete_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
     let collection = orders_collection();
 

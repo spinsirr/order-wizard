@@ -16,3 +16,6 @@ base64 = "0.22"
 mongodb = "3"
 futures = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-axum = "0.2"
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
