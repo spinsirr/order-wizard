@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind theme block */
+@theme {
+  --color-background: hsl(210 25% 97%);
+  --color-foreground: hsl(217 52% 10%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(217 52% 10%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(217 52% 10%);
+  --color-primary: hsl(256 46% 45%);
+  --color-primary-foreground: hsl(218 100% 97%);
+  --color-secondary: hsl(210 40% 94%);
+  --color-secondary-foreground: hsl(217 52% 16%);
+  --color-muted: hsl(214 32% 92%);
+  --color-muted-foreground: hsl(215 18% 40%);
+  --color-accent: hsl(183 44% 48%);
+  --color-accent-foreground: hsl(182 86% 97%);
+  --color-destructive: hsl(1 70% 55%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214 32% 90%);
+  --color-input: hsl(214 32% 90%);
+  --color-ring: hsl(256 46% 45%);
+
+  --radius-lg: 0.875rem;
+  --radius-md: calc(0.875rem - 3px);
+  --radius-sm: calc(0.875rem - 6px);
+}
+
+.dark {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind theme block */
+  @theme {
+    --color-background: hsl(240 12% 11%);
+    --color-foreground: hsl(216 20% 92%);
+    --color-card: hsl(240 14% 15%);
+    --color-card-foreground: hsl(216 20% 92%);
+    --color-popover: hsl(240 14% 15%);
+    --color-popover-foreground: hsl(216 20% 92%);
+    --color-primary: hsl(256 66% 75%);
+    --color-primary-foreground: hsl(254 63% 18%);
+    --color-secondary: hsl(230 16% 20%);
+    --color-secondary-foreground: hsl(216 20% 92%);
+    --color-muted: hsl(230 16% 20%);
+    --color-muted-foreground: hsl(216 15% 70%);
+    --color-accent: hsl(183 47% 60%);
+    --color-accent-foreground: hsl(194 86% 12%);
+    --color-destructive: hsl(0 80% 70%);
+    --color-destructive-foreground: hsl(354 61% 18%);
+    --color-border: hsl(230 18% 27%);
+    --color-input: hsl(230 18% 27%);
+    --color-ring: hsl(256 66% 75%);
+  }
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 400px;
+}
+
+/* Scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 85%, transparent),
+    color-mix(in srgb, var(--color-primary-foreground) 15%, transparent)
+  );
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--color-background) 85%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}

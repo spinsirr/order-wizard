@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon Order Wizard",
+  "version": "1.0.0",
+  "description": "Manage and track your Amazon orders",
+  "permissions": ["storage", "activeTab", "sidePanel", "identity"],
+  "host_permissions": [
+    "*://*.amazon.com/*",
+    "https://*.amazoncognito.com/*",
+    "https://cognito-idp.us-west-1.amazonaws.com/*"
+  ],
+  "action": {
+    "default_title": "Open Order Wizard"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.com/gp/your-account/order-history*",
+        "*://*.amazon.com/your-orders/orders*"
+      ],
+      "js": ["src/content/content.ts"]
+    }
+  ],
+  "background": {
+    "service_worker": "src/background/background.ts",
+    "type": "module"
+  }
+}

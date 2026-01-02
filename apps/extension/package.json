@@ -1,0 +1,46 @@
+{
+  "name": "@order-wizard/extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "biome lint",
+    "lint:fix": "biome lint --write",
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "fuse.js": "^7.1.0",
+    "lucide-react": "^0.545.0",
+    "oidc-client-ts": "^3.3.0",
+    "papaparse": "^5.5.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-oidc-context": "^3.3.0",
+    "tailwind-merge": "^3.3.1",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.12",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.5",
+    "@crxjs/vite-plugin": "^2.2.0",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/chrome": "^0.1.22",
+    "@types/node": "^24.6.0",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "tailwindcss": "^4.1.14",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.10"
+  }
+}

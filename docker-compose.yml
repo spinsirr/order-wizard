@@ -1,0 +1,26 @@
+services:
+  server:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    env_file:
+      - ./apps/server/.env.production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:8.2
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_DATABASE=order-wizard
+
+volumes:
+  mongo-data:
+    driver: local

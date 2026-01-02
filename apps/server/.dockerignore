@@ -1,0 +1,10 @@
+target/
+Dockerfile
+.env.local
+.env.development
+*.log
+tmp/
+dist/
+node_modules/
+git/
+.git/
