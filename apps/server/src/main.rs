@@ -77,16 +77,20 @@ async fn protected_resource_metadata() -> Json<ProtectedResourceMetadata> {
         std::env::var("OIDC_ISSUER").expect("OIDC_ISSUER must be set");
     let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
 
+    // Get scopes from environment, defaulting to openid and email
+    // Note: Cognito app clients must have scopes explicitly enabled
+    let scopes = std::env::var("OIDC_SCOPES")
+        .unwrap_or_else(|_| "openid email".to_string())
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
     Json(ProtectedResourceMetadata {
         resource,
         authorization_servers: vec![authorization_server],
         client_id,
         bearer_methods_supported: vec!["header".to_string()],
-        scopes_supported: vec![
-            "openid".to_string(),
-            "email".to_string(),
-            "profile".to_string(),
-        ],
+        scopes_supported: scopes,
     })
 }
 
@@ -147,6 +151,9 @@ struct ApiDoc;
 
 #[tokio::main]
 async fn main() {
+    // Load .env file if present
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_subscriber::EnvFilter::from_default_env())

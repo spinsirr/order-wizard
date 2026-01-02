@@ -222,7 +222,6 @@ export class ApiRepository {
       method: 'POST',
       headers,
       body: JSON.stringify(order),
-      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -234,7 +233,6 @@ export class ApiRepository {
     const headers = this.buildHeaders();
     const response = await fetch(`${this.baseUrl}/orders`, {
       headers,
-      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -251,7 +249,6 @@ export class ApiRepository {
       method: 'PATCH',
       headers,
       body: JSON.stringify(updates),
-      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -264,7 +261,6 @@ export class ApiRepository {
     const response = await fetch(`${this.baseUrl}/orders/${id}`, {
       method: 'DELETE',
       headers,
-      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -276,7 +272,6 @@ export class ApiRepository {
     const headers = this.buildHeaders();
     const response = await fetch(`${this.baseUrl}/orders/${id}`, {
       headers,
-      credentials: 'include',
     });
 
     if (response.status === 404) {

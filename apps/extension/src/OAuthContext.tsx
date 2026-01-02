@@ -1,7 +1,12 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { AuthProvider } from 'react-oidc-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fetchOAuthConfig, getCachedOAuthConfig, type OAuthConfig } from './oauth-discovery';
+import {
+  fetchOAuthConfig,
+  getCachedOAuthConfig,
+  clearOAuthConfigCache,
+  type OAuthConfig,
+} from './oauth-discovery';
 import { apiBaseUrl, buildAuthProviderProps } from './config';
 
 // ============================================================================
@@ -59,6 +64,28 @@ export function OAuthProvider({ children }: OAuthProviderProps) {
   const [discovering, setDiscovering] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // Handle OAuth error responses in URL (e.g., invalid_scope)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get('error');
+    const errorDescription = params.get('error_description');
+
+    if (oauthError) {
+      // Clear the cached config since it might have bad scopes
+      clearOAuthConfigCache();
+      setConfig(null);
+
+      // Show user-friendly error
+      const message = errorDescription
+        ? `${oauthError}: ${errorDescription}`
+        : `OAuth error: ${oauthError}`;
+      setError(new Error(message));
+
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   /**
    * Called when we receive a 401 or user clicks sign in.
    * Discovers the OAuth config from /.well-known/oauth-protected-resource
@@ -98,20 +125,23 @@ export function OAuthProvider({ children }: OAuthProviderProps) {
       <OAuthConfigContext.Provider value={contextValue}>
         <QueryClientProvider client={queryClient}>
           {discovering ? (
-            <div className="flex h-screen items-center justify-center">
+            <div className="flex h-screen items-center justify-center bg-background">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4" />
-                <p className="text-gray-600">Discovering authentication server...</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+                <p className="text-muted-foreground">Discovering authentication server...</p>
               </div>
             </div>
           ) : error ? (
-            <div className="flex h-screen items-center justify-center">
-              <div className="text-center">
-                <p className="text-red-600 font-semibold">Authentication Error</p>
-                <p className="text-sm text-gray-600 mt-2">{error.message}</p>
+            <div className="flex h-screen items-center justify-center bg-background">
+              <div className="text-center max-w-md px-4">
+                <p className="text-destructive font-semibold text-lg">Authentication Error</p>
+                <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
                 <button
-                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-                  onClick={() => void discoverAndLogin()}
+                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    setError(null);
+                    void discoverAndLogin();
+                  }}
                 >
                   Retry
                 </button>

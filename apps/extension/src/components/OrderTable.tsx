@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Download,
   Eye,
+  LogIn,
   Minus,
   MessageCircle,
   Package,
@@ -14,7 +15,8 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { useAuth } from 'react-oidc-context';
+import { useSafeAuth } from '@/hooks/useSafeAuth';
+import { useOAuthContext } from '@/OAuthContext';
 import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
 import { useOrderUIStore, filterAndSortOrders, exportOrdersToCSV } from '@/store/orderStore';
 import type { OrderSortOption, StatusFilter } from '@/store/orderStore';
@@ -88,8 +90,9 @@ type ConfirmData =
   | { type: 'bulk'; orderIds: string[]; message: string };
 
 export function OrderTable() {
-  const auth = useAuth();
-  const profile = auth.user?.profile;
+  const auth = useSafeAuth();
+  const { discoverAndLogin } = useOAuthContext();
+  const profile = auth?.user?.profile;
   const resolvedUserId =
     profile?.sub ?? (typeof profile?.email === 'string' ? profile.email : null);
 
@@ -122,25 +125,25 @@ export function OrderTable() {
 
   // Set user ID when auth changes
   useEffect(() => {
-    if (auth.isLoading) return;
+    if (!auth || auth.isLoading) return;
 
     if (!auth.isAuthenticated || !auth.user?.access_token) {
       setCurrentUserId(null);
     } else {
       setCurrentUserId(resolvedUserId);
     }
-  }, [auth.isAuthenticated, auth.isLoading, auth.user?.access_token, resolvedUserId, setCurrentUserId]);
+  }, [auth, resolvedUserId, setCurrentUserId]);
 
-  // Clean up selected IDs when orders change
+  // Clean up selected IDs when orders change (remove IDs that no longer exist)
   useEffect(() => {
+    const orderIds = new Set(displayOrders.map((o) => o.id));
     setSelectedIds((previous) => {
-      const next = new Set<string>();
-      displayOrders.forEach((order) => {
-        if (previous.has(order.id)) {
-          next.add(order.id);
-        }
-      });
-      return next;
+      const stillValid = [...previous].filter((id) => orderIds.has(id));
+      // Only update if something changed
+      if (stillValid.length === previous.size) {
+        return previous;
+      }
+      return new Set(stillValid);
     });
   }, [displayOrders]);
 
@@ -213,6 +216,23 @@ export function OrderTable() {
       return next;
     });
   };
+
+  // Show login prompt when not authenticated
+  if (!auth || !auth.isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center">
+        <LogIn className="mb-4 h-12 w-12 text-muted-foreground" aria-hidden="true" />
+        <div className="mb-2 text-lg font-semibold">Sign in to view your orders</div>
+        <p className="max-w-sm text-sm text-muted-foreground mb-4">
+          Connect your account to sync and manage your Amazon orders across devices.
+        </p>
+        <Button onClick={() => void discoverAndLogin()} size="sm">
+          <LogIn className="h-4 w-4 mr-2" aria-hidden="true" />
+          Sign In
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

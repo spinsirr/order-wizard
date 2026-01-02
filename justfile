@@ -7,10 +7,20 @@ db-stop:
     docker-compose down
 
 # Run all dev servers in parallel (starts MongoDB first)
+# Note: Use Ctrl+C twice or run `just stop` to kill all processes
 dev: db
-    just dev-extension &
-    just dev-server &
+    #!/usr/bin/env bash
+    trap 'kill 0' EXIT SIGINT SIGTERM
+    (cd apps/extension && bun run dev) &
+    (cd apps/server && cargo run) &
     wait
+
+# Stop all dev processes
+stop:
+    -pkill -f "target/debug/server"
+    -pkill -f "vite"
+    -lsof -ti:3000 | xargs -r kill -9
+    -lsof -ti:5173 | xargs -r kill -9
 
 # Extension commands
 dev-extension:

@@ -1,14 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { orderRepository } from '@/config';
+import { useSafeAuth } from '@/hooks/useSafeAuth';
 import type { Order, OrderStatus } from '@/types';
 
 const ORDERS_KEY = ['orders'] as const;
 
 export function useOrders() {
+  const auth = useSafeAuth();
+  const isAuthenticated = auth?.isAuthenticated ?? false;
+
   return useQuery({
     queryKey: ORDERS_KEY,
     queryFn: () => orderRepository.getAll(),
     staleTime: 1000 * 60, // 1 minute
+    enabled: isAuthenticated, // Only fetch when authenticated
   });
 }
 
