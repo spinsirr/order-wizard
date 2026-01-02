@@ -1,5 +1,5 @@
-import { initializeErrorHandlers } from '@/utils/errorHandler';
-import type { Order } from '@/types/Order';
+import { initializeErrorHandlers } from '@/utils';
+import type { Order } from '@/types';
 
 initializeErrorHandlers();
 

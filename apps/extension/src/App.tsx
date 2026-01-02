@@ -2,7 +2,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { UserBar } from './components/UserBar';
 import { OrderTable } from './components/OrderTable';
 import { useEffect } from 'react';
-import { initializeErrorHandlers } from './utils/errorHandler';
+import { initializeErrorHandlers } from './utils';
 
 function AppContent() {
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { buildCognitoLogoutUrl } from '@/config/auth';
+import { buildCognitoLogoutUrl } from '@/config';
 import { useAccessToken } from '@/hooks/useAccessToken';
 
 export function UserBar() {

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import type { Order } from '@/types/Order';
-import type { OrderStatus } from '@/types/OrderStatus';
-import { orderRepository } from '@/config/storage';
+import type { Order, OrderStatus } from '@/types';
+import { orderRepository } from '@/config';
 import Papa from 'papaparse';
 import Fuse from 'fuse.js';
 
@@ -18,7 +17,6 @@ interface OrderStore {
   isLoading: boolean;
   error: string | null;
 
-  // Actions
   setCurrentUserId: (userId: string | null | undefined) => void;
   fetchOrders: () => Promise<void>;
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
@@ -30,7 +28,6 @@ interface OrderStore {
   setSortOption: (option: OrderSortOption) => void;
 }
 
-// Configure Fuse.js for fuzzy search
 const fuseOptions = {
   keys: [
     { name: 'orderNumber', weight: 2 },
@@ -38,7 +35,7 @@ const fuseOptions = {
     { name: 'price', weight: 1 },
     { name: 'note', weight: 1 },
   ],
-  threshold: 0.4, // 0.0 = exact match, 1.0 = match anything
+  threshold: 0.4,
   ignoreLocation: true,
   useExtendedSearch: false,
 };
@@ -99,7 +96,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   error: null,
 
   setCurrentUserId: (userId) => {
-    // Set the current userId on the repository (for LocalStorage repositories)
     if ('setCurrentUserId' in orderRepository) {
       (orderRepository as { setCurrentUserId: (id: string | null) => void }).setCurrentUserId(userId ?? null);
     }
@@ -127,7 +123,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
     try {
       await orderRepository.update(id, { status });
 
-      // Update local state
       set((state) => {
         const orders = state.orders.map((order) =>
           order.id === id ? { ...order, status } : order,
@@ -179,7 +174,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   exportOrders: () => {
     const { filteredOrders } = get();
 
-    // Convert to CSV using papaparse (export filtered orders)
     const csv = Papa.unparse(
       filteredOrders.map((order) => ({
         'Order Number': order.orderNumber,
@@ -191,7 +185,6 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
       })),
     );
 
-    // Download CSV
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

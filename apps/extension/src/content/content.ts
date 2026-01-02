@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { scrapeOrderData } from './scraper';
-import type { Order } from '@/types/Order';
-import { OrderStatus } from '@/types/OrderStatus';
-import { orderRepository } from '@/config/storage';
-import { initializeErrorHandlers } from '@/utils/errorHandler';
+import type { Order } from '@/types';
+import { OrderStatus } from '@/types';
+import { orderRepository } from '@/config';
+import { initializeErrorHandlers } from '@/utils';
 
 const orderDuplicateCache = new Map<string, Set<string>>();
 const CURRENT_USER_STORAGE_KEY = 'currentUser';

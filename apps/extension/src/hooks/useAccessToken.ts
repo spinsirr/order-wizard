@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { orderRepository } from '@/config/storage';
-import { ApiRepository } from '@/repositories/ApiRepository';
+import { orderRepository, ApiRepository } from '@/config';
 
 function setRepositoryToken(token: string | null, tokenType: string | null): void {
   if (orderRepository instanceof ApiRepository) {

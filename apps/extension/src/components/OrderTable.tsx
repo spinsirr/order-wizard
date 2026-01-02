@@ -17,8 +17,8 @@ import {
 import { useAuth } from 'react-oidc-context';
 import { useOrderStore } from '@/store/orderStore';
 import type { OrderSortOption, StatusFilter } from '@/store/orderStore';
-import { OrderStatus, ORDER_STATUS_LABELS } from '@/types/OrderStatus';
-import { cn } from '@/lib/utils';
+import { OrderStatus, ORDER_STATUS_LABELS } from '@/types';
+import { cn } from '@/utils';
 import { Button } from './ui/button';
 import { Card, CardTitle } from './ui/card';
 

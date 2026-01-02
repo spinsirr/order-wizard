@@ -1,3 +1,4 @@
+// Order status constants and type
 export const OrderStatus = {
   Uncommented: 'uncommented',
   Commented: 'commented',
@@ -13,3 +14,25 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   [OrderStatus.CommentRevealed]: 'Comment Revealed',
   [OrderStatus.Reimbursed]: 'Reimbursed',
 };
+
+// Order interface
+export interface Order {
+  id: string;
+  userId: string;
+  orderNumber: string;
+  productName: string;
+  orderDate: string;
+  productImage: string;
+  price: string;
+  status: OrderStatus;
+  note?: string;
+}
+
+// User interface
+export interface User {
+  id: string;
+  email?: string;
+  name?: string;
+  avatarUrl?: string;
+  createdAt: Date;
+}
