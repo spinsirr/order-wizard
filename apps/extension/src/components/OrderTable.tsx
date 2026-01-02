@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   BadgeCheck,
@@ -15,7 +15,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
-import { useOrderStore } from '@/store/orderStore';
+import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
+import { useOrderUIStore, filterAndSortOrders, exportOrdersToCSV } from '@/store/orderStore';
 import type { OrderSortOption, StatusFilter } from '@/store/orderStore';
 import { OrderStatus, ORDER_STATUS_LABELS } from '@/types';
 import { cn } from '@/utils';
@@ -87,48 +88,50 @@ type ConfirmData =
   | { type: 'bulk'; orderIds: string[]; message: string };
 
 export function OrderTable() {
-  const {
-    orders,
-    filteredOrders,
-    searchQuery,
-    statusFilter,
-    sortOption,
-    isLoading,
-    setCurrentUserId,
-    fetchOrders,
-    updateOrderStatus,
-    deleteOrders,
-    exportOrders,
-    setSearchQuery,
-    setStatusFilter,
-    setSortOption,
-  } = useOrderStore();
   const auth = useAuth();
   const profile = auth.user?.profile;
   const resolvedUserId =
     profile?.sub ?? (typeof profile?.email === 'string' ? profile.email : null);
+
+  // TanStack Query hooks
+  const { data: orders = [], isLoading } = useOrders();
+  const updateStatusMutation = useUpdateOrderStatus();
+  const deleteOrdersMutation = useDeleteOrders();
+
+  // UI state from Zustand
+  const {
+    searchQuery,
+    statusFilter,
+    sortOption,
+    setSearchQuery,
+    setStatusFilter,
+    setSortOption,
+    setCurrentUserId,
+  } = useOrderUIStore();
+
+  // Local UI state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
-  const [isConfirmProcessing, setIsConfirmProcessing] = useState(false);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());
 
-  const displayOrders = filteredOrders;
+  // Derived state
+  const displayOrders = useMemo(
+    () => filterAndSortOrders(orders, searchQuery, statusFilter, sortOption),
+    [orders, searchQuery, statusFilter, sortOption]
+  );
 
+  // Set user ID when auth changes
   useEffect(() => {
-    if (auth.isLoading) {
-      return;
-    }
+    if (auth.isLoading) return;
 
     if (!auth.isAuthenticated || !auth.user?.access_token) {
       setCurrentUserId(null);
-      void fetchOrders();
-      return;
+    } else {
+      setCurrentUserId(resolvedUserId);
     }
+  }, [auth.isAuthenticated, auth.isLoading, auth.user?.access_token, resolvedUserId, setCurrentUserId]);
 
-    setCurrentUserId(resolvedUserId);
-    void fetchOrders();
-  }, [auth.isAuthenticated, auth.isLoading, auth.user?.access_token, resolvedUserId, setCurrentUserId, fetchOrders]);
-
+  // Clean up selected IDs when orders change
   useEffect(() => {
     setSelectedIds((previous) => {
       const next = new Set<string>();
@@ -163,10 +166,7 @@ export function OrderTable() {
   };
 
   const handleDeleteSelected = () => {
-    if (selectedCount === 0) {
-      return;
-    }
-
+    if (selectedCount === 0) return;
     setConfirmData({
       type: 'bulk',
       orderIds: Array.from(selectedIds),
@@ -179,41 +179,35 @@ export function OrderTable() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!confirmData) {
-      return;
-    }
+    if (!confirmData) return;
 
-    setIsConfirmProcessing(true);
+    const idsToDelete = confirmData.type === 'bulk' ? confirmData.orderIds : [confirmData.orderId];
+
     try {
-      if (confirmData.type === 'bulk') {
-        await deleteOrders(confirmData.orderIds);
-        setSelectedIds(new Set());
-      } else {
-        await deleteOrders([confirmData.orderId]);
-        setSelectedIds((previous) => {
-          const next = new Set(previous);
-          next.delete(confirmData.orderId);
-          return next;
-        });
-      }
+      await deleteOrdersMutation.mutateAsync(idsToDelete);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        idsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
       setConfirmData(null);
-    } finally {
-      setIsConfirmProcessing(false);
+    } catch (error) {
+      console.error('Failed to delete orders:', error);
     }
   };
 
   const handleCancelDelete = () => {
-    if (isConfirmProcessing) {
-      return;
-    }
+    if (deleteOrdersMutation.isPending) return;
     setConfirmData(null);
+  };
+
+  const handleExport = () => {
+    exportOrdersToCSV(displayOrders);
   };
 
   const handleImageError = (orderId: string) => {
     setImageFailures((previous) => {
-      if (previous.has(orderId)) {
-        return previous;
-      }
+      if (previous.has(orderId)) return previous;
       const next = new Set(previous);
       next.add(orderId);
       return next;
@@ -290,7 +284,7 @@ export function OrderTable() {
               </span>
             </div>
             <Button
-              onClick={() => void handleDeleteSelected()}
+              onClick={handleDeleteSelected}
               size="sm"
               variant="destructive"
               disabled={selectedCount === 0}
@@ -298,7 +292,7 @@ export function OrderTable() {
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               Delete Selected
             </Button>
-            <Button onClick={exportOrders} size="sm" variant="tonal">
+            <Button onClick={handleExport} size="sm" variant="tonal">
               <Download className="h-4 w-4" aria-hidden="true" />
               Export CSV
             </Button>
@@ -490,7 +484,7 @@ export function OrderTable() {
                                 )}
                                 onClick={() => {
                                   if (!isActive) {
-                                    void updateOrderStatus(order.id, statusOption);
+                                    updateStatusMutation.mutate({ id: order.id, status: statusOption });
                                   }
                                 }}
                               >
@@ -523,7 +517,7 @@ export function OrderTable() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void handleDeleteSingle(order.id)}
+                            onClick={() => handleDeleteSingle(order.id)}
                             className="flex h-8 w-8 items-center justify-center rounded-full border border-destructive/30 text-destructive transition hover:bg-destructive/10"
                             aria-label="Remove order"
                           >
@@ -554,7 +548,7 @@ export function OrderTable() {
                 variant="outline"
                 size="sm"
                 onClick={handleCancelDelete}
-                disabled={isConfirmProcessing}
+                disabled={deleteOrdersMutation.isPending}
               >
                 Cancel
               </Button>
@@ -562,9 +556,9 @@ export function OrderTable() {
                 variant="destructive"
                 size="sm"
                 onClick={() => void handleConfirmDelete()}
-                disabled={isConfirmProcessing}
+                disabled={deleteOrdersMutation.isPending}
               >
-                {isConfirmProcessing ? 'Deleting…' : 'Delete'}
+                {deleteOrdersMutation.isPending ? 'Deleting…' : 'Delete'}
               </Button>
             </div>
           </div>
