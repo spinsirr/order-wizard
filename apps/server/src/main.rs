@@ -3,8 +3,8 @@ mod db;
 mod models;
 mod routes;
 
-use auth::{AuthError, AuthUser};
-use axum::Json;
+use auth::{auth_middleware, AuthError, AuthUser, JwksVerifier};
+use axum::{middleware, Json};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -30,20 +30,6 @@ struct UserInfo {
     username: Option<String>,
 }
 
-/// OAuth 2.0 Protected Resource Metadata per RFC 9728
-#[derive(Serialize, ToSchema)]
-struct ProtectedResourceMetadata {
-    /// The protected resource's resource identifier
-    resource: String,
-    /// Authorization servers that can authorize access to this resource
-    authorization_servers: Vec<String>,
-    /// OAuth 2.0 client ID to use with the authorization server
-    client_id: String,
-    /// Bearer token types supported
-    bearer_methods_supported: Vec<String>,
-    /// Scopes supported by this protected resource
-    scopes_supported: Vec<String>,
-}
 
 #[utoipa::path(
     get,
@@ -61,38 +47,6 @@ async fn health() -> Json<Health> {
     })
 }
 
-#[utoipa::path(
-    get,
-    path = "/.well-known/oauth-protected-resource",
-    tag = "Auth",
-    summary = "OAuth 2.0 Protected Resource Metadata",
-    description = "Returns the OAuth 2.0 Protected Resource Metadata per RFC 9728",
-    responses(
-        (status = 200, description = "Protected Resource Metadata", body = ProtectedResourceMetadata)
-    )
-)]
-async fn protected_resource_metadata() -> Json<ProtectedResourceMetadata> {
-    let resource = std::env::var("RESOURCE_URI").expect("RESOURCE_URI must be set");
-    let authorization_server =
-        std::env::var("OIDC_ISSUER").expect("OIDC_ISSUER must be set");
-    let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
-
-    // Get scopes from environment, defaulting to openid and email
-    // Note: Cognito app clients must have scopes explicitly enabled
-    let scopes = std::env::var("OIDC_SCOPES")
-        .unwrap_or_else(|_| "openid email".to_string())
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-
-    Json(ProtectedResourceMetadata {
-        resource,
-        authorization_servers: vec![authorization_server],
-        client_id,
-        bearer_methods_supported: vec!["header".to_string()],
-        scopes_supported: scopes,
-    })
-}
 
 #[utoipa::path(
     get,
@@ -159,9 +113,18 @@ async fn main() {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    // Initialize JWT verifier with Cognito configuration
+    let issuer = std::env::var("OIDC_ISSUER").expect("OIDC_ISSUER must be set");
+    let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
+    JwksVerifier::init(issuer, client_id);
+    tracing::info!("JWT verifier initialized");
+
     // Initialize database (optional - server can still serve auth endpoints without it)
     if let Err(e) = db::init_db().await {
-        tracing::warn!("Failed to connect to MongoDB: {}. Order endpoints will not work.", e);
+        tracing::warn!(
+            "Failed to connect to MongoDB: {}. Order endpoints will not work.",
+            e
+        );
     }
 
     let cors = CorsLayer::new()
@@ -169,11 +132,18 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(utoipa_axum::routes!(health))
-        .routes(utoipa_axum::routes!(protected_resource_metadata))
+    // Public routes (no auth required)
+    let public_routes = OpenApiRouter::new().routes(utoipa_axum::routes!(health));
+
+    // Protected routes (auth middleware applied)
+    let protected_routes = OpenApiRouter::new()
         .routes(utoipa_axum::routes!(me))
         .merge(routes::orders::router())
+        .layer(middleware::from_fn(auth_middleware));
+
+    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .merge(public_routes)
+        .merge(protected_routes)
         .split_for_parts();
 
     let app = router
@@ -184,7 +154,10 @@ async fn main() {
     let addr = format!("0.0.0.0:{}", port);
 
     tracing::info!("Server running on {}", addr);
-    tracing::info!("Swagger UI available at http://localhost:{}/swagger-ui", port);
+    tracing::info!(
+        "Swagger UI available at http://localhost:{}/swagger-ui",
+        port
+    );
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

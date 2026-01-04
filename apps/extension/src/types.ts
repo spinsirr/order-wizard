@@ -26,6 +26,12 @@ export interface Order {
   price: string;
   status: OrderStatus;
   note?: string;
+  /** ISO timestamp of when order was last modified (for sync conflict resolution) */
+  updatedAt?: string;
+  /** ISO timestamp of when order was created */
+  createdAt?: string;
+  /** ISO timestamp of when order was soft-deleted locally (for sync) */
+  deletedAt?: string;
 }
 
 // User interface
