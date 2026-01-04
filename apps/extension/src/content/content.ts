@@ -33,13 +33,8 @@ async function readCurrentUserFromStorage(): Promise<StoredUser | null> {
     });
   }
 
-  try {
-    const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as StoredUser) : null;
-  } catch (error) {
-    console.error('Failed to read current user from localStorage:', error);
-    return null;
-  }
+  const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+  return raw ? (JSON.parse(raw) as StoredUser) : null;
 }
 
 async function getCurrentUser(): Promise<StoredUser | null> {
@@ -75,17 +70,12 @@ async function ensureOrderCache(userId: string): Promise<void> {
     return;
   }
 
-  try {
-    // Set the current userId on the repository (for LocalStorage repositories)
-    if ('setCurrentUserId' in orderRepository) {
-      (orderRepository as { setCurrentUserId: (id: string) => void }).setCurrentUserId(userId);
-    }
-    const orders = await orderRepository.getAll();
-    setOrderCache(userId, orders);
-  } catch (error) {
-    console.error('Failed to prime duplicate cache:', error);
-    orderDuplicateCache.set(userId, new Set());
+  // Set the current userId on the repository (for LocalStorage repositories)
+  if ('setCurrentUserId' in orderRepository) {
+    (orderRepository as { setCurrentUserId: (id: string) => void }).setCurrentUserId(userId);
   }
+  const orders = await orderRepository.getAll();
+  setOrderCache(userId, orders);
 }
 
 function hasOrderInCache(userId: string, orderNumber: string): boolean {
@@ -202,59 +192,46 @@ function showDuplicateFeedback(button: HTMLButtonElement): void {
 }
 
 /**
- * Show error feedback on button
- */
-function showErrorFeedback(button: HTMLButtonElement, error: Error): void {
-  console.error('Failed to save order:', error);
-  showButtonFeedback(button, '❌ Error', '#C40000', false);
-}
-
-/**
  * Handle save button click
  */
 async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): Promise<void> {
-  try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      showErrorFeedback(button, new Error('Please sign in before saving orders.'));
-      return;
-    }
-
-    await ensureOrderCache(currentUser.id);
-
-    // Scrape order data
-    const scrapedData = scrapeOrderData(orderCard);
-
-    // Check for duplicates by order number
-    if (hasOrderInCache(currentUser.id, scrapedData.orderNumber)) {
-      showDuplicateFeedback(button);
-      return;
-    }
-
-    // Create order object
-    const order: Order = {
-      id: uuidv4(),
-      userId: currentUser.id,
-      ...scrapedData,
-      status: OrderStatus.Uncommented,
-    };
-
-    // Save to repository
-    await orderRepository.save(order);
-
-    addOrderToCache(currentUser.id, order.orderNumber);
-
-    // Show success feedback
-    showSuccessFeedback(button);
-
-    // Notify popup if open
-    chrome.runtime.sendMessage({
-      type: 'ORDER_SAVED',
-      order,
-    });
-  } catch (error) {
-    showErrorFeedback(button, error as Error);
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error('Please sign in before saving orders.');
   }
+
+  await ensureOrderCache(currentUser.id);
+
+  // Scrape order data
+  const scrapedData = scrapeOrderData(orderCard);
+
+  // Check for duplicates by order number
+  if (hasOrderInCache(currentUser.id, scrapedData.orderNumber)) {
+    showDuplicateFeedback(button);
+    return;
+  }
+
+  // Create order object
+  const order: Order = {
+    id: uuidv4(),
+    userId: currentUser.id,
+    ...scrapedData,
+    status: OrderStatus.Uncommented,
+  };
+
+  // Save to repository
+  await orderRepository.save(order);
+
+  addOrderToCache(currentUser.id, order.orderNumber);
+
+  // Show success feedback
+  showSuccessFeedback(button);
+
+  // Notify popup if open
+  chrome.runtime.sendMessage({
+    type: 'ORDER_SAVED',
+    order,
+  });
 }
 
 /**

@@ -50,36 +50,22 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 
   // Enable side panel to open on action click
-  try {
-    if (chrome.sidePanel?.setPanelBehavior) {
-      await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-      console.log('✅ Side panel behavior configured');
-    } else {
-      console.error('❌ Side panel API not available');
-    }
-  } catch (error) {
-    console.error('❌ Failed to configure side panel:', error);
+  if (chrome.sidePanel?.setPanelBehavior) {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    console.log('✅ Side panel behavior configured');
+  } else {
+    console.error('❌ Side panel API not available');
   }
 });
 
 // Add action click listener as fallback
 chrome.action.onClicked.addListener(async (tab) => {
   console.log('🖱️ Extension icon clicked');
-  try {
-    if (chrome.sidePanel?.open) {
-      await chrome.sidePanel.open({ windowId: tab.windowId });
-      console.log('✅ Side panel opened');
-    } else {
-      console.error('❌ Side panel API not available, opening popup window');
-      chrome.windows.create({
-        url: chrome.runtime.getURL('index.html'),
-        type: 'popup',
-        width: 800,
-        height: 600,
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error opening side panel:', error);
+  if (chrome.sidePanel?.open) {
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+    console.log('✅ Side panel opened');
+  } else {
+    console.error('❌ Side panel API not available, opening popup window');
     chrome.windows.create({
       url: chrome.runtime.getURL('index.html'),
       type: 'popup',

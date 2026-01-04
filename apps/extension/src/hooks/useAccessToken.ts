@@ -28,13 +28,7 @@ export function useAccessToken() {
       return undefined;
     }
 
-    return async () => {
-      try {
-        await auth.signinSilent();
-      } catch (error) {
-        console.error('[auth] Silent token refresh failed:', error);
-      }
-    };
+    return () => auth.signinSilent();
   }, [auth]);
 
   return {

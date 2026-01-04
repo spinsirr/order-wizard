@@ -39,11 +39,7 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
     if (!confirmed) {
       return;
     }
-    try {
-      await auth.removeUser();
-    } catch {
-      // ignore remove user errors and continue logout
-    }
+    await auth.removeUser();
     window.location.href = buildCognitoLogoutUrl();
   };
 

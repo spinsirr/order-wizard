@@ -159,17 +159,13 @@ export function OrderTable() {
 
     const idsToDelete = confirmData.type === 'bulk' ? confirmData.orderIds : [confirmData.orderId];
 
-    try {
-      await deleteOrdersMutation.mutateAsync(idsToDelete);
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        idsToDelete.forEach((id) => next.delete(id));
-        return next;
-      });
-      setConfirmData(null);
-    } catch (error) {
-      console.error('Failed to delete orders:', error);
-    }
+    await deleteOrdersMutation.mutateAsync(idsToDelete);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      idsToDelete.forEach((id) => next.delete(id));
+      return next;
+    });
+    setConfirmData(null);
   };
 
   const handleCancelDelete = () => {
