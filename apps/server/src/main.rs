@@ -6,7 +6,8 @@ mod routes;
 use auth::{auth_middleware, AuthError, AuthUser, JwksVerifier};
 use axum::{middleware, Json};
 use serde::Serialize;
-use tower_http::cors::{Any, CorsLayer};
+use axum::http::{header, Method};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
@@ -128,9 +129,10 @@ async fn main() {
     }
 
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(AllowOrigin::any())
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .expose_headers([header::CONTENT_TYPE]);
 
     // Public routes (no auth required)
     let public_routes = OpenApiRouter::new().routes(utoipa_axum::routes!(health));
