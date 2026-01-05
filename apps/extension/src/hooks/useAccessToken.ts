@@ -1,41 +1,17 @@
-import { useEffect, useMemo } from 'react';
-import { useAuth } from 'react-oidc-context';
-import { orderRepository, ApiRepository } from '@/config';
+import { useAuth } from '@/contexts/AuthContext';
 
-function setRepositoryToken(token: string | null, tokenType: string | null): void {
-  if (orderRepository instanceof ApiRepository) {
-    orderRepository.setAccessToken(token, tokenType ?? 'Bearer');
-  }
+interface AccessToken {
+  accessToken: string | null;
+  tokenType: 'Bearer';
+  expiresAt: number | null;
 }
 
-export function useAccessToken() {
-  const auth = useAuth();
-
-  const token = auth.user?.access_token ?? null;
-  const tokenType = auth.user?.token_type ?? 'Bearer';
-  const expiresAt = auth.user?.expires_at ? auth.user.expires_at * 1000 : null;
-
-  useEffect(() => {
-    if (auth.isLoading) {
-      return;
-    }
-
-    setRepositoryToken(auth.isAuthenticated ? token : null, tokenType);
-  }, [auth.isAuthenticated, auth.isLoading, token, tokenType]);
-
-  const refresh = useMemo(() => {
-    if (typeof auth.signinSilent !== 'function') {
-      return undefined;
-    }
-
-    return () => auth.signinSilent();
-  }, [auth]);
+export function useAccessToken(): AccessToken {
+  const { user } = useAuth();
 
   return {
-    accessToken: token,
-    tokenType,
-    expiresAt,
-    isLoading: auth.isLoading,
-    refreshAccessToken: refresh,
+    accessToken: user?.access_token ?? null,
+    tokenType: 'Bearer',
+    expiresAt: user?.expires_at ?? null,
   };
 }

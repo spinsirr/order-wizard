@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from 'react-oidc-context';
+import { useAuth } from '@/contexts/AuthContext';
 import { localRepository, apiRepository } from '@/config';
 import type { Order, OrderStatus } from '@/types';
 
@@ -9,12 +9,10 @@ const ORDERS_KEY = ['orders'] as const;
  * Returns the appropriate repository based on auth state.
  * - Authenticated: Use API repository (cloud)
  * - Not authenticated: Use local storage
- *
- * Note: Token is set by useAccessToken hook in UserBar
  */
 function useRepository() {
-  const auth = useAuth();
-  return auth.isAuthenticated && apiRepository ? apiRepository : localRepository;
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated && apiRepository ? apiRepository : localRepository;
 }
 
 export function useOrders() {
@@ -62,8 +60,7 @@ export function useUpdateOrderStatus() {
 
 export function useDeleteOrders() {
   const queryClient = useQueryClient();
-  const auth = useAuth();
-  const isAuthenticated = auth.isAuthenticated;
+  const { isAuthenticated } = useAuth();
 
   return useMutation({
     mutationFn: async (ids: string[]) => {

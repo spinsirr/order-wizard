@@ -1,22 +1,16 @@
 import { useMemo } from 'react';
-import { useAuth } from 'react-oidc-context';
-import { buildCognitoLogoutUrl } from '@/config';
-import { useAccessToken } from '@/hooks/useAccessToken';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserBarProps {
   isSyncing?: boolean;
   onSync?: () => void;
   lastSyncedAt?: Date | null;
-  isAuthenticated?: boolean;
 }
 
 export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProps) {
-  const auth = useAuth();
-  const profile = auth.user?.profile;
-  useAccessToken();
+  const { isLoading, isAuthenticated, user, error, signIn, signOut } = useAuth();
 
-  const displayEmail = profile?.email ?? '';
-  const avatarUrl = profile?.picture;
+  const displayEmail = user?.email ?? '';
 
   const avatarInitial = useMemo(() => {
     if (displayEmail) {
@@ -26,24 +20,23 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
   }, [displayEmail]);
 
   const handleSignIn = () => {
-    if (!auth.isLoading) {
-      void auth.signinRedirect({ prompt: 'login' });
+    if (!isLoading) {
+      signIn();
     }
   };
 
-  const handleSignOut = async () => {
-    if (auth.isLoading) {
+  const handleSignOut = () => {
+    if (isLoading) {
       return;
     }
     const confirmed = window.confirm('Are you sure you want to sign out?');
     if (!confirmed) {
       return;
     }
-    await auth.removeUser();
-    window.location.href = buildCognitoLogoutUrl();
+    signOut();
   };
 
-  if (auth.isLoading) {
+  if (isLoading) {
     return (
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
         <div className="flex w-full items-center justify-between px-6 py-5">
@@ -53,12 +46,12 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
     );
   }
 
-  if (auth.error) {
+  if (error) {
     return (
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
         <div className="flex w-full items-center justify-between px-6 py-5">
           <span className="text-sm text-destructive md:text-base">
-            Encountering error... {auth.error.message}
+            Encountering error... {error.message}
           </span>
           <button
             type="button"
@@ -75,20 +68,12 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
   return (
     <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
       <div className="flex w-full items-center px-6 py-5 min-h-[96px]">
-        {auth.isAuthenticated && profile ? (
+        {isAuthenticated && user ? (
           <div className="flex w-full items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayEmail || 'User avatar'}
-                  className="h-12 w-12 rounded-2xl border border-border/60 shadow-sm"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-lg font-semibold text-primary shadow-inner">
-                  {avatarInitial}
-                </div>
-              )}
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-lg font-semibold text-primary shadow-inner">
+                {avatarInitial}
+              </div>
               <div className="text-sm text-muted-foreground md:text-base">
                 {displayEmail || 'No email provided'}
               </div>
@@ -127,8 +112,8 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
               <button
                 type="button"
                 className="rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-                onClick={() => void handleSignOut()}
-                disabled={auth.isLoading}
+                onClick={handleSignOut}
+                disabled={isLoading}
               >
                 Sign out
               </button>
@@ -143,7 +128,7 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
               type="button"
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-70"
               onClick={handleSignIn}
-              disabled={auth.isLoading}
+              disabled={isLoading}
             >
               Sign in
             </button>

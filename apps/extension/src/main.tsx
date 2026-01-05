@@ -1,10 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AuthProvider } from 'react-oidc-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '@/contexts/AuthContext';
 import './index.css';
 import App from './App.tsx';
-import { cognitoAuthConfig } from './config';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,15 +22,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AuthProvider
-      {...cognitoAuthConfig}
-      onSigninCallback={() => {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
         <App />
-      </QueryClientProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   </StrictMode>
 );

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { useAuth } from 'react-oidc-context';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAccessToken } from '@/hooks/useAccessToken';
 import { localRepository, apiRepository } from '@/config';
 import type { Order } from '@/types';
 
@@ -136,12 +137,11 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
  * - New orders (exist only in one place) are synced to the other
  */
 export function useOrderSync() {
-  const auth = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const { accessToken } = useAccessToken();
   const queryClient = useQueryClient();
 
-  const isAuthenticated = auth.isAuthenticated;
-  const accessToken = auth.user?.access_token;
-  const userId = auth.user?.profile?.sub;
+  const userId = user?.sub;
 
   const syncMutation = useMutation({
     mutationFn: () => {
@@ -151,7 +151,6 @@ export function useOrderSync() {
   });
 
   // Sync on login
-  // Note: Token is set by useAccessToken hook in UserBar
   useEffect(() => {
     if (isAuthenticated && accessToken && apiRepository && userId) {
       syncMutation.mutate();

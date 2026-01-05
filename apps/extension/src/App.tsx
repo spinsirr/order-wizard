@@ -7,7 +7,7 @@ import { initializeErrorHandlers } from './utils';
 
 function AppContent() {
   // Sync local orders to cloud when user logs in
-  const { isSyncing, syncToCloud, lastSyncedAt, isAuthenticated } = useOrderSync();
+  const { isSyncing, syncToCloud, lastSyncedAt } = useOrderSync();
 
   useEffect(() => {
     initializeErrorHandlers();
@@ -19,7 +19,6 @@ function AppContent() {
         isSyncing={isSyncing}
         onSync={syncToCloud}
         lastSyncedAt={lastSyncedAt}
-        isAuthenticated={isAuthenticated}
       />
       <OrderTable />
     </div>
