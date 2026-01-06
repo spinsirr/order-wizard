@@ -23,6 +23,7 @@ pub struct Jwks {
 pub struct Jwk {
     pub kid: String,
     pub kty: String,
+    #[allow(dead_code)]
     pub alg: String,
     pub n: String,
     pub e: String,

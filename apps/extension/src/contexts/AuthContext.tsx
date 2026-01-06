@@ -3,6 +3,7 @@ import * as oauth from 'oauth4webapi';
 import { apiRepository } from '@/config';
 
 const AUTH_STORAGE_KEY = 'auth_user';
+const CURRENT_USER_STORAGE_KEY = 'currentUser';
 
 interface AuthUser {
   sub: string;
@@ -69,8 +70,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (savedUser && savedUser.expires_at > Date.now()) {
         setUser(savedUser);
         setIsAuthenticated(true);
+        // Ensure currentUser is set for content script
+        chrome.storage.local.set({
+          [CURRENT_USER_STORAGE_KEY]: {
+            id: savedUser.sub,
+            email: savedUser.email,
+          },
+        });
       } else if (savedUser) {
-        chrome.storage.local.remove([AUTH_STORAGE_KEY]);
+        chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
       }
       setIsLoading(false);
     });
@@ -140,7 +148,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
             expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
           };
 
-          await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
+          // Save auth user and current user for content script
+          await chrome.storage.local.set({
+            [AUTH_STORAGE_KEY]: newUser,
+            [CURRENT_USER_STORAGE_KEY]: {
+              id: newUser.sub,
+              email: newUser.email,
+            },
+          });
 
           setUser(newUser);
           setIsAuthenticated(true);
@@ -154,7 +169,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signOut = useCallback(() => {
-    chrome.storage.local.remove([AUTH_STORAGE_KEY]);
+    chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
 
     setUser(null);
     setIsAuthenticated(false);

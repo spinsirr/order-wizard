@@ -28,98 +28,121 @@ function getNewerOrder(a: Order, b: Order): Order {
   return b;
 }
 
+const LOCAL_USER_ID = 'local';
+
 async function performSync(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
   if (!apiRepository) return;
 
-  // Get local and cloud orders
-  const [localOrders, cloudOrders] = await Promise.all([
+  // Get ALL local orders (including userId: 'local') and cloud orders
+  localRepository.setCurrentUserId(null); // Clear filter to get all orders
+  const [localOrders, cloudOrders, deletedOrderNumbers] = await Promise.all([
     localRepository.getAll(),
     apiRepository.getAll(),
+    localRepository.getDeletedOrderNumbers(),
   ]);
 
-  // Create maps for efficient lookup
-  const localOrderMap = new Map(localOrders.map((o) => [o.orderNumber, o]));
+  // Create map for cloud orders by orderNumber
   const cloudOrderMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
-
-  // Collect all unique order numbers
-  const allOrderNumbers = new Set([...localOrderMap.keys(), ...cloudOrderMap.keys()]);
 
   const ordersToUploadToCloud: Order[] = [];
   const ordersToSaveLocally: Order[] = [];
-
+  const localOrdersToDelete: string[] = [];
   const ordersToDeleteFromCloud: string[] = [];
-  const ordersToCleanupLocally: string[] = [];
 
-  for (const orderNumber of allOrderNumbers) {
-    const localOrder = localOrderMap.get(orderNumber);
-    const cloudOrder = cloudOrderMap.get(orderNumber);
+  // Process local orders
+  for (const localOrder of localOrders) {
+    const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
 
-    if (localOrder && cloudOrder) {
-      // Order exists in both - check for soft delete scenario
-      if (localOrder.deletedAt) {
-        const deletedTime = new Date(localOrder.deletedAt).getTime();
-        const cloudUpdatedTime = cloudOrder.updatedAt
-          ? new Date(cloudOrder.updatedAt).getTime()
-          : 0;
-
-        if (cloudUpdatedTime > deletedTime) {
-          // Cloud was updated AFTER local deletion - user re-added it
-          // Restore the order locally (remove deletedAt, use cloud version)
-          ordersToSaveLocally.push(cloudOrder);
-        } else {
-          // Local deletion is newer - delete from cloud
-          ordersToDeleteFromCloud.push(cloudOrder.id);
-          ordersToCleanupLocally.push(localOrder.id);
-        }
+    if (localOrder.userId === LOCAL_USER_ID) {
+      // This is a local-only order that needs to be synced
+      if (cloudOrder) {
+        // Already exists in cloud - keep cloud version, delete local
+        ordersToSaveLocally.push(cloudOrder);
+        localOrdersToDelete.push(localOrder.id);
       } else {
-        // No deletion - resolve normal conflict
+        // Doesn't exist in cloud - upload with real userId
+        ordersToUploadToCloud.push({ ...localOrder, userId });
+        localOrdersToDelete.push(localOrder.id); // Delete old local copy with 'local' userId
+      }
+    } else if (localOrder.userId === userId) {
+      // User's existing order - normal conflict resolution
+      if (localOrder.deletedAt) {
+        // Soft-deleted order (authenticated deletion)
+        if (cloudOrder) {
+          const deletedTime = new Date(localOrder.deletedAt).getTime();
+          const cloudUpdatedTime = cloudOrder.updatedAt
+            ? new Date(cloudOrder.updatedAt).getTime()
+            : 0;
+
+          if (cloudUpdatedTime > deletedTime) {
+            // Cloud was updated AFTER local deletion - restore
+            ordersToSaveLocally.push(cloudOrder);
+          } else {
+            // Local deletion is newer - delete from cloud
+            ordersToDeleteFromCloud.push(cloudOrder.id);
+            localOrdersToDelete.push(localOrder.id);
+          }
+        } else {
+          // Deleted locally and doesn't exist in cloud - cleanup
+          localOrdersToDelete.push(localOrder.id);
+        }
+      } else if (cloudOrder) {
+        // Both exist, resolve conflict
         const winner = getNewerOrder(localOrder, cloudOrder);
         if (winner === localOrder && winner.updatedAt !== cloudOrder.updatedAt) {
-          // Local is newer - upload to cloud
           ordersToUploadToCloud.push(localOrder);
         } else if (winner === cloudOrder && winner.updatedAt !== localOrder.updatedAt) {
-          // Cloud is newer - save locally
           ordersToSaveLocally.push(cloudOrder);
         }
-        // If same updatedAt, no action needed
-      }
-    } else if (localOrder && !cloudOrder) {
-      if (localOrder.deletedAt) {
-        // Was deleted locally and doesn't exist in cloud - clean up local
-        ordersToCleanupLocally.push(localOrder.id);
       } else {
-        // Only exists locally - upload to cloud
+        // Only exists locally - upload
         ordersToUploadToCloud.push(localOrder);
       }
-    } else if (cloudOrder && !localOrder) {
-      // Only exists in cloud - save locally
+    }
+    // Ignore orders from other users
+  }
+
+  // Download cloud-only orders (orders that don't exist locally at all)
+  for (const cloudOrder of cloudOrders) {
+    const existsLocally = localOrders.some((o) => o.orderNumber === cloudOrder.orderNumber);
+    if (!existsLocally) {
       ordersToSaveLocally.push(cloudOrder);
     }
   }
 
-  // Upload local-only or newer local orders to cloud
-  // Assign the authenticated user's ID to local orders before uploading
-  for (const order of ordersToUploadToCloud) {
-    const orderWithUserId = { ...order, userId };
-    await apiRepository.save(orderWithUserId);
-    // Also update local storage with the correct userId
-    await localRepository.save(orderWithUserId);
+  // Handle tracked deletions (orders that were hard-deleted while not authenticated)
+  for (const orderNumber of deletedOrderNumbers) {
+    const cloudOrder = cloudOrderMap.get(orderNumber);
+    if (cloudOrder) {
+      ordersToDeleteFromCloud.push(cloudOrder.id);
+    }
   }
 
-  // Save cloud-only or newer cloud orders locally
+  // Execute sync operations
+
+  // Upload orders to cloud and save locally with real userId
+  for (const order of ordersToUploadToCloud) {
+    await apiRepository.save(order);
+    await localRepository.save(order);
+  }
+
+  // Save cloud orders locally
   for (const order of ordersToSaveLocally) {
     await localRepository.save(order);
   }
 
-  // Delete from cloud (syncing local deletions)
+  // Delete from cloud
   for (const id of ordersToDeleteFromCloud) {
     await apiRepository.delete(id);
   }
 
-  // Clean up soft-deleted orders from local storage after sync
-  for (const id of ordersToCleanupLocally) {
+  // Delete old local orders (local userId copies, soft-deleted synced, etc.)
+  for (const id of localOrdersToDelete) {
     await localRepository.delete(id);
   }
+
+  // Clear deletion tracking after successful sync
+  await localRepository.clearDeletedOrderNumbers();
 
   // Invalidate the orders query to refresh UI
   queryClient.invalidateQueries({ queryKey: ORDERS_KEY });

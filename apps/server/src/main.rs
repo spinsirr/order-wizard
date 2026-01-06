@@ -129,10 +129,11 @@ async fn main() {
     }
 
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::any())
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_origin(AllowOrigin::mirror_request())
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
-        .expose_headers([header::CONTENT_TYPE]);
+        .expose_headers([header::CONTENT_TYPE])
+        .allow_credentials(true);
 
     // Public routes (no auth required)
     let public_routes = OpenApiRouter::new().routes(utoipa_axum::routes!(health));

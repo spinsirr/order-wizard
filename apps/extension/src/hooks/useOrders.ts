@@ -5,14 +5,23 @@ import type { Order, OrderStatus } from '@/types';
 
 const ORDERS_KEY = ['orders'] as const;
 
+const LOCAL_USER_ID = 'local';
+
 /**
  * Returns the appropriate repository based on auth state.
  * - Authenticated: Use API repository (cloud)
- * - Not authenticated: Use local storage
+ * - Not authenticated: Use local storage scoped to 'local' userId
  */
 function useRepository() {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated && apiRepository ? apiRepository : localRepository;
+
+  if (isAuthenticated && apiRepository) {
+    return apiRepository;
+  }
+
+  // When not authenticated, scope to 'local' userId
+  localRepository.setCurrentUserId(LOCAL_USER_ID);
+  return localRepository;
 }
 
 export function useOrders() {
@@ -74,8 +83,16 @@ export function useDeleteOrders() {
           ...ids.map((id) => localRepository.update(id, { deletedAt: now })),
         ]);
       } else {
-        // When offline: soft-delete locally (will sync deletion later)
-        await Promise.all(ids.map((id) => localRepository.update(id, { deletedAt: now })));
+        // When not authenticated: hard delete + track orderNumbers for sync
+        localRepository.setCurrentUserId(null); // Get all orders to find the ones to delete
+        const orders = await localRepository.getAll();
+        const ordersToDelete = orders.filter((o) => ids.includes(o.id));
+
+        for (const order of ordersToDelete) {
+          // Track the orderNumber so we can delete from cloud on sync
+          await localRepository.trackDeletedOrderNumber(order.orderNumber);
+          await localRepository.delete(order.id);
+        }
       }
     },
     onMutate: async (ids) => {

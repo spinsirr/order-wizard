@@ -12,6 +12,7 @@ export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export class LocalStorageRepository {
   private readonly STORAGE_KEY = 'orders';
+  private readonly DELETED_ORDERS_KEY = 'deleted_order_numbers';
   private currentUserId: string | null = null;
 
   setCurrentUserId(userId: string | null): void {
@@ -25,6 +26,24 @@ export class LocalStorageRepository {
 
   private async saveAllOrders(orders: Order[]): Promise<void> {
     await chrome.storage.local.set({ [this.STORAGE_KEY]: orders });
+  }
+
+  async trackDeletedOrderNumber(orderNumber: string): Promise<void> {
+    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
+    const deleted = (result[this.DELETED_ORDERS_KEY] as string[]) || [];
+    if (!deleted.includes(orderNumber)) {
+      deleted.push(orderNumber);
+      await chrome.storage.local.set({ [this.DELETED_ORDERS_KEY]: deleted });
+    }
+  }
+
+  async getDeletedOrderNumbers(): Promise<string[]> {
+    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
+    return (result[this.DELETED_ORDERS_KEY] as string[]) || [];
+  }
+
+  async clearDeletedOrderNumbers(): Promise<void> {
+    await chrome.storage.local.remove(this.DELETED_ORDERS_KEY);
   }
 
   async save(order: Order): Promise<void> {

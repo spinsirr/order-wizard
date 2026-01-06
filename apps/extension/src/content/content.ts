@@ -7,12 +7,17 @@ import { initializeErrorHandlers } from '@/utils';
 
 const orderDuplicateCache = new Map<string, Set<string>>();
 const CURRENT_USER_STORAGE_KEY = 'currentUser';
+const LOCAL_USER_ID = 'local';
 
 interface StoredUser {
   id: string;
   email?: string;
   name?: string;
 }
+
+const LOCAL_USER: StoredUser = {
+  id: LOCAL_USER_ID,
+};
 
 let cachedUser: StoredUser | null = null;
 
@@ -37,12 +42,14 @@ async function readCurrentUserFromStorage(): Promise<StoredUser | null> {
   return raw ? (JSON.parse(raw) as StoredUser) : null;
 }
 
-async function getCurrentUser(): Promise<StoredUser | null> {
+async function getCurrentUser(): Promise<StoredUser> {
   if (cachedUser) {
     return cachedUser;
   }
 
-  cachedUser = await readCurrentUserFromStorage();
+  const storedUser = await readCurrentUserFromStorage();
+  // Fall back to local user if not signed in
+  cachedUser = storedUser ?? LOCAL_USER;
   return cachedUser;
 }
 
@@ -107,9 +114,6 @@ async function replaceCacheFromMessage(message: unknown): Promise<void> {
   }
 
   const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return;
-  }
 
   const userOrders = (orders as Order[]).filter((order) => order.userId === currentUser.id);
   setOrderCache(currentUser.id, userOrders);
@@ -196,9 +200,6 @@ function showDuplicateFeedback(button: HTMLButtonElement): void {
  */
 async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): Promise<void> {
   const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    throw new Error('Please sign in before saving orders.');
-  }
 
   await ensureOrderCache(currentUser.id);
 
@@ -227,10 +228,12 @@ async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): P
   // Show success feedback
   showSuccessFeedback(button);
 
-  // Notify popup if open
+  // Notify popup if open (ignore errors if popup is closed)
   chrome.runtime.sendMessage({
     type: 'ORDER_SAVED',
     order,
+  }).catch(() => {
+    // Popup not open, ignore
   });
 }
 
@@ -252,8 +255,18 @@ function injectSaveButtons(): void {
     if (shipToSection) {
       const button = createSaveButton();
 
-      button.addEventListener('click', () => {
-        handleSaveClick(orderCard, button);
+      button.addEventListener('click', async () => {
+        try {
+          await handleSaveClick(orderCard, button);
+        } catch (error) {
+          // Handle extension context invalidated (happens after extension reload)
+          if (error instanceof Error && error.message.includes('Extension context invalidated')) {
+            showButtonFeedback(button, 'Refresh page', '#d32f2f', false);
+            return;
+          }
+          const message = error instanceof Error ? error.message : 'Failed to save order';
+          showButtonFeedback(button, `❌ ${message}`, '#d32f2f', false);
+        }
       });
 
       // Inject button
