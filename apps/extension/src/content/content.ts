@@ -1,4 +1,4 @@
-import { initializeErrorHandlers } from '@/utils';
+import { initializeErrorHandlers } from '@/lib';
 import { getCurrentUser } from './userResolver';
 import { saveOrder, replaceCacheFromMessage } from './orderProcessor';
 import {

@@ -1,5 +1,5 @@
 import { CheckCircle2, Circle, ClipboardList, Download, Minus, Trash2 } from 'lucide-react';
-import { cn } from '@/utils';
+import { cn } from '@/lib';
 import { Button } from './ui/button';
 
 interface OrderTableToolbarProps {

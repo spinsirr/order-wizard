@@ -10,7 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
-import { cn } from '@/utils';
+import { cn } from '@/lib';
 import { Card, CardTitle } from './ui/card';
 
 const FALLBACK_COLORS = [

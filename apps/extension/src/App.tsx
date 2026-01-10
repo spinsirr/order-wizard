@@ -3,7 +3,7 @@ import { UserBar } from './components/UserBar';
 import { OrderTable } from './components/OrderTable';
 import { useOrderSync } from './hooks/useOrderSync';
 import { useEffect } from 'react';
-import { initializeErrorHandlers } from './utils';
+import { initializeErrorHandlers } from '@/lib';
 
 function AppContent() {
   // Sync local orders to cloud when user logs in

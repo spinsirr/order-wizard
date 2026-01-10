@@ -1,4 +1,4 @@
-import { type ScrapedOrderData, ScrapedOrderDataSchema } from '@/utils';
+import { type ScrapedOrderData, ScrapedOrderDataSchema } from '@/schemas';
 
 /**
  * Scrape order data from Amazon order card

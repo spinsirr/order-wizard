@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { cn } from '@/utils';
+import { cn } from '@/lib';
 
 const elevationStyles = {
   low: 'shadow-[0_1px_2px_rgba(15,23,42,0.14),0_1px_3px_rgba(15,23,42,0.12)]',

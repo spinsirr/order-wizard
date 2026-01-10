@@ -1,4 +1,4 @@
-import { initializeErrorHandlers } from '@/utils';
+import { initializeErrorHandlers } from '@/lib';
 import type { Order } from '@/types';
 
 initializeErrorHandlers();

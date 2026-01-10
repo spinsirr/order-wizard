@@ -1,9 +1,7 @@
 import type * as oauth from 'oauth4webapi';
+import { cognitoAuthority, cognitoClientId, cognitoDomain } from './env';
 
-// OAuth configuration from environment
-const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN;
-const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
-const issuer = new URL(import.meta.env.VITE_COGNITO_AUTHORITY);
+const issuer = new URL(cognitoAuthority);
 
 export const authorizationServer: oauth.AuthorizationServer = {
   issuer: issuer.href,
@@ -13,7 +11,7 @@ export const authorizationServer: oauth.AuthorizationServer = {
 };
 
 export const oauthClient: oauth.Client = {
-  client_id: clientId,
+  client_id: cognitoClientId,
   token_endpoint_auth_method: 'none',
 };
 
@@ -21,7 +19,7 @@ export function buildAuthorizationUrl(codeChallenge: string): URL {
   const redirectUri = chrome.identity.getRedirectURL();
   const authUrl = new URL(authorizationServer.authorization_endpoint as string);
 
-  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('client_id', cognitoClientId);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('scope', 'openid email');
@@ -34,5 +32,5 @@ export function buildAuthorizationUrl(codeChallenge: string): URL {
 
 export function buildLogoutUrl(): string {
   const redirectUri = chrome.identity.getRedirectURL();
-  return `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(redirectUri)}`;
+  return `${cognitoDomain}/logout?client_id=${cognitoClientId}&logout_uri=${encodeURIComponent(redirectUri)}`;
 }
