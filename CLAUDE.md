@@ -91,15 +91,13 @@ Uncommented → Commented → CommentRevealed → Reimbursed
 
 ## Git Conventions
 
-**Commits** - Do NOT include "Generated with Claude" or AI attribution in commit messages, issues, or PRs.
+**Commits** - Do NOT include "Generated with Claude", "Co-Authored-By: Claude", or any AI attribution in commit messages, issues, or PRs.
 
 **Commit Message Format**:
 ```
 type: short description
 
 Optional longer description.
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
