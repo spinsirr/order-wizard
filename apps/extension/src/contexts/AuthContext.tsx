@@ -1,19 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import * as oauth from 'oauth4webapi';
 import { apiRepository } from '@/config';
+import { authorizationServer, oauthClient, buildAuthorizationUrl, buildLogoutUrl } from '@/config/oauth';
 import { AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/constants';
+import type { AuthUser } from '@/types';
 
 // Refresh token 5 minutes before expiry
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
-interface AuthUser {
-  sub: string;
-  email?: string;
-  access_token: string;
-  id_token: string;
-  refresh_token?: string;
-  expires_at: number;
-}
 
 interface AuthContextValue {
   isLoading: boolean;
@@ -26,25 +19,19 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// OAuth configuration
-const issuer = new URL(import.meta.env.VITE_COGNITO_AUTHORITY);
-const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
-const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN;
+// Helper: Save current user to storage for content script access
+function saveCurrentUserToStorage(user: AuthUser): void {
+  chrome.storage.local.set({
+    [CURRENT_USER_STORAGE_KEY]: {
+      id: user.sub,
+      email: user.email,
+    },
+  });
+}
 
-const authorizationServer: oauth.AuthorizationServer = {
-  issuer: issuer.href,
-  authorization_endpoint: `${cognitoDomain}/oauth2/authorize`,
-  token_endpoint: `${cognitoDomain}/oauth2/token`,
-  end_session_endpoint: `${cognitoDomain}/logout`,
-};
-
-const client: oauth.Client = {
-  client_id: clientId,
-  token_endpoint_auth_method: 'none',
-};
-
-function buildLogoutUrl(redirectUri: string): string {
-  return `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(redirectUri)}`;
+// Helper: Clear all auth data from storage
+function clearAuthStorage(): void {
+  chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
 }
 
 interface AuthProviderProps {
@@ -56,6 +43,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState<Error | null>(null);
+
+  // Helper: Clear auth state and storage
+  const clearAuth = useCallback(() => {
+    setUser(null);
+    setIsAuthenticated(false);
+    clearAuthStorage();
+  }, []);
+
+  // Helper: Set authenticated user
+  const setAuthenticatedUser = useCallback((newUser: AuthUser) => {
+    setUser(newUser);
+    setIsAuthenticated(true);
+    saveCurrentUserToStorage(newUser);
+  }, []);
 
   // Update API repository token when user changes
   useEffect(() => {
@@ -73,14 +74,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const response = await oauth.refreshTokenGrantRequest(
         authorizationServer,
-        client,
+        oauthClient,
         oauth.None(),
         currentUser.refresh_token
       );
 
       const result = await oauth.processRefreshTokenResponse(
         authorizationServer,
-        client,
+        oauthClient,
         response
       );
 
@@ -95,7 +96,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
       return newUser;
     } catch {
-      // Refresh failed, user needs to re-authenticate
       return null;
     }
   }, []);
@@ -113,39 +113,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const timeUntilExpiry = savedUser.expires_at - Date.now();
 
-      // Token is expired or about to expire
       if (timeUntilExpiry < TOKEN_REFRESH_BUFFER_MS) {
         const refreshedUser = await refreshAccessToken(savedUser);
         if (refreshedUser) {
-          setUser(refreshedUser);
-          setIsAuthenticated(true);
-          chrome.storage.local.set({
-            [CURRENT_USER_STORAGE_KEY]: {
-              id: refreshedUser.sub,
-              email: refreshedUser.email,
-            },
-          });
+          setAuthenticatedUser(refreshedUser);
         } else {
-          // Refresh failed, clear auth
-          chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
+          clearAuthStorage();
         }
       } else {
-        // Token is still valid
-        setUser(savedUser);
-        setIsAuthenticated(true);
-        chrome.storage.local.set({
-          [CURRENT_USER_STORAGE_KEY]: {
-            id: savedUser.sub,
-            email: savedUser.email,
-          },
-        });
+        setAuthenticatedUser(savedUser);
       }
 
       setIsLoading(false);
     };
 
     initAuth();
-  }, [refreshAccessToken]);
+  }, [refreshAccessToken, setAuthenticatedUser]);
 
   // Auto-refresh token before expiry
   useEffect(() => {
@@ -155,53 +138,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const timeUntilRefresh = user.expires_at - Date.now() - TOKEN_REFRESH_BUFFER_MS;
 
-    // If already past refresh time, refresh immediately
     if (timeUntilRefresh <= 0) {
       refreshAccessToken(user).then((refreshedUser) => {
         if (refreshedUser) {
           setUser(refreshedUser);
         } else {
-          // Refresh failed, sign out
-          setUser(null);
-          setIsAuthenticated(false);
-          chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
+          clearAuth();
         }
       });
       return;
     }
 
-    // Schedule refresh before expiry
     const timerId = setTimeout(async () => {
       const refreshedUser = await refreshAccessToken(user);
       if (refreshedUser) {
         setUser(refreshedUser);
       } else {
-        // Refresh failed, sign out
-        setUser(null);
-        setIsAuthenticated(false);
-        chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
+        clearAuth();
       }
     }, timeUntilRefresh);
 
     return () => clearTimeout(timerId);
-  }, [user, refreshAccessToken]);
+  }, [user, refreshAccessToken, clearAuth]);
 
   const signIn = useCallback(async () => {
     const redirectUri = chrome.identity.getRedirectURL();
-
-    // Generate PKCE code verifier and challenge
     const codeVerifier = oauth.generateRandomCodeVerifier();
     const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
-
-    // Build authorization URL
-    const authUrl = new URL(authorizationServer.authorization_endpoint as string);
-    authUrl.searchParams.set('client_id', clientId);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('scope', 'openid email');
-    authUrl.searchParams.set('code_challenge', codeChallenge);
-    authUrl.searchParams.set('code_challenge_method', 'S256');
-    authUrl.searchParams.set('prompt', 'login');
+    const authUrl = buildAuthorizationUrl(codeChallenge);
 
     setIsLoading(true);
     setError(null);
@@ -216,18 +180,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         try {
-          // Parse the callback URL
           const callbackParams = oauth.validateAuthResponse(
             authorizationServer,
-            client,
+            oauthClient,
             new URL(responseUrl),
             oauth.expectNoState
           );
 
-          // Exchange code for tokens
           const response = await oauth.authorizationCodeGrantRequest(
             authorizationServer,
-            client,
+            oauthClient,
             oauth.None(),
             callbackParams,
             redirectUri,
@@ -236,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
           const result = await oauth.processAuthorizationCodeResponse(
             authorizationServer,
-            client,
+            oauthClient,
             response
           );
 
@@ -254,17 +216,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
           };
 
-          // Save auth user and current user for content script
-          await chrome.storage.local.set({
-            [AUTH_STORAGE_KEY]: newUser,
-            [CURRENT_USER_STORAGE_KEY]: {
-              id: newUser.sub,
-              email: newUser.email,
-            },
-          });
-
-          setUser(newUser);
-          setIsAuthenticated(true);
+          await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
+          setAuthenticatedUser(newUser);
           setIsLoading(false);
         } catch (err) {
           setIsLoading(false);
@@ -272,24 +225,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
     );
-  }, []);
+  }, [setAuthenticatedUser]);
 
   const signOut = useCallback(() => {
-    chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
-
-    setUser(null);
-    setIsAuthenticated(false);
-
-    const redirectUri = chrome.identity.getRedirectURL();
-    const logoutUrl = buildLogoutUrl(redirectUri);
+    clearAuth();
 
     chrome.identity.launchWebAuthFlow(
-      { url: logoutUrl, interactive: false },
+      { url: buildLogoutUrl(), interactive: false },
       () => {
         // Ignore errors on logout
       }
     );
-  }, []);
+  }, [clearAuth]);
 
   const value: AuthContextValue = {
     isLoading,

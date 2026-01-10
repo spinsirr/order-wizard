@@ -42,3 +42,13 @@ export interface User {
   avatarUrl?: string;
   createdAt: Date;
 }
+
+// Authenticated user with tokens
+export interface AuthUser {
+  sub: string;
+  email?: string;
+  access_token: string;
+  id_token: string;
+  refresh_token?: string;
+  expires_at: number;
+}
