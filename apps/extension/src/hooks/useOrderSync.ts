@@ -3,10 +3,8 @@ import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAccessToken } from '@/hooks/useAccessToken';
 import { localRepository, apiRepository } from '@/config';
+import { ORDERS_KEY, LOCAL_USER_ID } from '@/constants';
 import type { Order } from '@/types';
-
-const ORDERS_KEY = ['orders'] as const;
-const LOCAL_USER_ID = 'local';
 
 /**
  * Local-First Sync Strategy:

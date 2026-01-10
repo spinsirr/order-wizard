@@ -1,9 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import * as oauth from 'oauth4webapi';
 import { apiRepository } from '@/config';
-
-const AUTH_STORAGE_KEY = 'auth_user';
-const CURRENT_USER_STORAGE_KEY = 'currentUser';
+import { AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/constants';
 
 // Refresh token 5 minutes before expiry
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;

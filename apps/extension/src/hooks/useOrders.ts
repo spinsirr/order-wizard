@@ -1,11 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository, apiRepository } from '@/config';
+import { ORDERS_KEY, LOCAL_USER_ID } from '@/constants';
 import type { Order, OrderStatus } from '@/types';
-
-const ORDERS_KEY = ['orders'] as const;
-
-const LOCAL_USER_ID = 'local';
 
 /**
  * Local-First Architecture:
