@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository, apiRepository } from '@/config';
@@ -8,7 +8,7 @@ import type { Order } from '@/types';
 /**
  * Cloud Sync Logic
  *
- * - Syncs on login + manual trigger
+ * - Syncs on login + after any order change
  * - Uploads local orders to cloud
  * - Downloads cloud orders not in local
  * - Handles deletions both ways
@@ -103,19 +103,29 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
 }
 
 /**
- * Sync local orders with cloud (on login + manual trigger)
+ * Sync local orders with cloud (on login + after order changes)
  */
 export function useCloudSync() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.sub;
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const syncMutation = useMutation({
     mutationFn: () => {
       if (!userId) throw new Error('User ID not available');
       return performSync(userId, queryClient);
     },
+    onSuccess: () => {
+      setLastSyncedAt(new Date());
+    },
   });
+
+  const sync = useCallback(() => {
+    if (isAuthenticated && apiRepository && userId && !syncMutation.isPending) {
+      syncMutation.mutate();
+    }
+  }, [isAuthenticated, userId, syncMutation]);
 
   // Auto-sync on login
   const hasSyncedRef = useRef(false);
@@ -126,13 +136,30 @@ export function useCloudSync() {
     }
     if (!isAuthenticated) {
       hasSyncedRef.current = false;
+      setLastSyncedAt(null);
     }
   }, [isAuthenticated, userId, syncMutation]);
 
+  // Listen for order changes - trigger sync
+  useEffect(() => {
+    if (!isAuthenticated || !apiRepository || !userId) return;
+
+    const syncTriggers = ['ORDER_SAVED', 'ORDER_UPDATED', 'ORDER_DELETED'];
+
+    const handleMessage = (message: { type?: string }) => {
+      if (message.type && syncTriggers.includes(message.type)) {
+        sync();
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleMessage);
+  }, [isAuthenticated, userId, sync]);
+
   return {
     isSyncing: syncMutation.isPending,
-    lastSyncedAt: syncMutation.isSuccess ? new Date() : null,
+    lastSyncedAt,
     error: syncMutation.error,
-    sync: () => syncMutation.mutate(),
+    sync,
   };
 }

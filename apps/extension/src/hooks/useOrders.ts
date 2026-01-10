@@ -68,6 +68,8 @@ export function useUpdateOrderStatus() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
+      // Trigger cloud sync
+      chrome.runtime.sendMessage({ type: 'ORDER_UPDATED' }).catch(() => {});
     },
   });
 }
@@ -113,6 +115,8 @@ export function useDeleteOrders() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
+      // Trigger cloud sync
+      chrome.runtime.sendMessage({ type: 'ORDER_DELETED' }).catch(() => {});
     },
   });
 }
