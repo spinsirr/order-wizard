@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Amazon Order Wizard",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "Manage and track your Amazon orders",
-  "permissions": ["storage", "activeTab", "sidePanel", "identity"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "sidePanel",
+    "identity"
+  ],
   "host_permissions": [
     "*://*.amazon.com/*",
     "https://*.amazoncognito.com/*",
@@ -21,7 +26,9 @@
         "*://*.amazon.com/gp/your-account/order-history*",
         "*://*.amazon.com/your-orders/orders*"
       ],
-      "js": ["src/content/content.ts"]
+      "js": [
+        "src/content/content.ts"
+      ]
     }
   ],
   "background": {
