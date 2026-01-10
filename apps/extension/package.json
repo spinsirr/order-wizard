@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && rm -rf /mnt/c/order-wizard-ext && cp -r dist /mnt/c/order-wizard-ext",
+    "build": "tsc && vite build",
+    "build:local": "tsc && vite build && rm -rf /mnt/c/order-wizard-ext && cp -r dist /mnt/c/order-wizard-ext",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
     "format": "biome format --write",
