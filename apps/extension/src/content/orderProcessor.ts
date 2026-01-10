@@ -95,12 +95,14 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
     };
   } else {
     // Create new order
+    const now = new Date().toISOString();
     order = {
       id: uuidv4(),
       userId,
       ...scrapedData,
       status: OrderStatus.Uncommented,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
   }
 
