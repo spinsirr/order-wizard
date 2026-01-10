@@ -18,7 +18,7 @@ export function OrderTable() {
   // UI state (local - no need for global store)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortOption, setSortOption] = useState<OrderSortOption>('updated-desc');
+  const [sortOption, setSortOption] = useState<OrderSortOption>('created-desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());

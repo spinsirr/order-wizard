@@ -47,8 +47,8 @@ export function OrderTableFilters({
             onChange={(event) => onSortOptionChange(event.target.value as OrderSortOption)}
             className="w-full whitespace-nowrap rounded-2xl border border-transparent bg-card px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] transition focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 sm:text-sm"
           >
-            <option value="updated-desc">Updated: Newest</option>
-            <option value="updated-asc">Updated: Oldest</option>
+            <option value="created-desc">Created: Newest</option>
+            <option value="created-asc">Created: Oldest</option>
             <option value="date-desc">Order Date: Newest</option>
             <option value="date-asc">Order Date: Oldest</option>
           </select>

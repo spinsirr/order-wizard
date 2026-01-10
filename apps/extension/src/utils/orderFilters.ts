@@ -2,7 +2,7 @@ import Fuse from 'fuse.js';
 import type { Order, OrderStatus } from '@/types';
 
 export type StatusFilter = OrderStatus | 'all';
-export type OrderSortOption = 'updated-desc' | 'updated-asc' | 'date-desc' | 'date-asc';
+export type OrderSortOption = 'created-desc' | 'created-asc' | 'date-desc' | 'date-asc';
 
 const fuseOptions = {
   keys: [
@@ -24,14 +24,7 @@ export function searchOrders(orders: Order[], query: string): Order[] {
   return fuse.search(query).map((result) => result.item);
 }
 
-function getUpdatedTime(order: Order): number {
-  if (order.updatedAt) {
-    const parsed = new Date(order.updatedAt);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.getTime();
-    }
-  }
-  // Fallback to createdAt or 0
+function getCreatedTime(order: Order): number {
   if (order.createdAt) {
     const parsed = new Date(order.createdAt);
     if (!Number.isNaN(parsed.getTime())) {
@@ -50,11 +43,11 @@ export function sortOrders(orders: Order[], option: OrderSortOption): Order[] {
   const sorted = [...orders];
 
   switch (option) {
-    case 'updated-desc':
-      sorted.sort((a, b) => getUpdatedTime(b) - getUpdatedTime(a));
+    case 'created-desc':
+      sorted.sort((a, b) => getCreatedTime(b) - getCreatedTime(a));
       break;
-    case 'updated-asc':
-      sorted.sort((a, b) => getUpdatedTime(a) - getUpdatedTime(b));
+    case 'created-asc':
+      sorted.sort((a, b) => getCreatedTime(a) - getCreatedTime(b));
       break;
     case 'date-desc':
       sorted.sort((a, b) => getOrderDate(b) - getOrderDate(a));
