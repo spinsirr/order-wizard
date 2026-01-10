@@ -1,7 +1,10 @@
 name: Release
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
 
 permissions:
   contents: write
@@ -13,44 +16,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
-      - name: Get version from package.json
+      - name: Check version change
         id: version
         run: |
-          VERSION=$(jq -r '.version' package.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
+          # Get current version
+          CURRENT=$(jq -r '.version' package.json)
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
 
-          # Sync version to manifest.json
-          jq --arg v "$VERSION" '.version = $v' apps/extension/public/manifest.json > tmp.json
-          mv tmp.json apps/extension/public/manifest.json
+          # Get previous version
+          git show HEAD~1:package.json > /tmp/prev-package.json 2>/dev/null || echo '{"version":"0.0.0"}' > /tmp/prev-package.json
+          PREVIOUS=$(jq -r '.version' /tmp/prev-package.json)
+
+          echo "Current: $CURRENT, Previous: $PREVIOUS"
+
+          if [ "$CURRENT" = "$PREVIOUS" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged, skipping release"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREVIOUS to $CURRENT"
+          fi
 
       - name: Check if tag exists
+        if: steps.version.outputs.changed == 'true'
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ steps.version.outputs.version }} already exists. Please bump version in manifest.json first."
+          if git rev-parse "v${{ steps.version.outputs.current }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ steps.version.outputs.current }} already exists."
             exit 1
           fi
 
       - name: Setup Bun
+        if: steps.version.outputs.changed == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Install dependencies
+        if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: bun install --frozen-lockfile
 
       - name: TypeScript check
+        if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: bun run typecheck
 
       - name: Lint
+        if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: bun run lint
 
+      - name: Sync version to manifest.json
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          jq --arg v "${{ steps.version.outputs.current }}" '.version = $v' apps/extension/public/manifest.json > tmp.json
+          mv tmp.json apps/extension/public/manifest.json
+
       - name: Build
+        if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: bun run build
         env:
@@ -60,21 +85,24 @@ jobs:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
 
       - name: Create extension zip
+        if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: |
           cd dist
-          zip -r ../amazon-order-wizard-v${{ steps.version.outputs.version }}.zip .
+          zip -r ../amazon-order-wizard-v${{ steps.version.outputs.current }}.zip .
 
       - name: Create tag
+        if: steps.version.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          git tag -a "v${{ steps.version.outputs.current }}" -m "Release v${{ steps.version.outputs.current }}"
+          git push origin "v${{ steps.version.outputs.current }}"
 
       - name: Create Release
+        if: steps.version.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.current }}
           generate_release_notes: true
-          files: apps/extension/amazon-order-wizard-v${{ steps.version.outputs.version }}.zip
+          files: apps/extension/amazon-order-wizard-v${{ steps.version.outputs.current }}.zip
