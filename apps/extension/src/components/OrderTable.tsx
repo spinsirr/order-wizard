@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
-import { useOrderUIStore, filterAndSortOrders, exportOrdersToCSV } from '@/store/orderStore';
+import { filterAndSortOrders, exportOrdersToCSV } from '@/utils';
+import type { StatusFilter, OrderSortOption } from '@/utils';
 import type { OrderStatus } from '@/types';
 import { OrderCard } from './OrderCard';
 import { OrderTableToolbar } from './OrderTableToolbar';
@@ -14,11 +15,10 @@ export function OrderTable() {
   const updateStatusMutation = useUpdateOrderStatus();
   const deleteOrdersMutation = useDeleteOrders();
 
-  // UI state from Zustand
-  const { searchQuery, statusFilter, sortOption, setSearchQuery, setStatusFilter, setSortOption } =
-    useOrderUIStore();
-
-  // Local UI state
+  // UI state (local - no need for global store)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sortOption, setSortOption] = useState<OrderSortOption>('date-desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());
