@@ -8,7 +8,9 @@ import { orderRepository } from '@/config';
 const orderDuplicateCache = new Map<string, Set<string>>();
 
 function setOrderCache(userId: string, orders: readonly Order[]): void {
-  orderDuplicateCache.set(userId, new Set(orders.map((order) => order.orderNumber)));
+  // Only cache non-deleted orders for duplicate detection
+  const activeOrders = orders.filter((order) => !order.deletedAt);
+  orderDuplicateCache.set(userId, new Set(activeOrders.map((order) => order.orderNumber)));
 }
 
 export async function ensureOrderCache(userId: string): Promise<void> {
@@ -72,12 +74,35 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
     return { success: false, isDuplicate: true };
   }
 
-  const order: Order = {
-    id: uuidv4(),
-    userId,
-    ...scrapedData,
-    status: OrderStatus.Uncommented,
-  };
+  // Check if there's a soft-deleted order with the same orderNumber
+  if ('setCurrentUserId' in orderRepository) {
+    (orderRepository as { setCurrentUserId: (id: string) => void }).setCurrentUserId(userId);
+  }
+  const allOrders = await orderRepository.getAll();
+  const deletedOrder = allOrders.find(
+    (o) => o.orderNumber === scrapedData.orderNumber && o.deletedAt
+  );
+
+  let order: Order;
+
+  if (deletedOrder) {
+    // Restore the deleted order with updated data
+    order = {
+      ...deletedOrder,
+      ...scrapedData,
+      deletedAt: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    // Create new order
+    order = {
+      id: uuidv4(),
+      userId,
+      ...scrapedData,
+      status: OrderStatus.Uncommented,
+      createdAt: new Date().toISOString(),
+    };
+  }
 
   await orderRepository.save(order);
   addOrderToCache(userId, order.orderNumber);
