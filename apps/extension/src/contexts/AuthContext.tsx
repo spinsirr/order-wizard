@@ -5,11 +5,15 @@ import { apiRepository } from '@/config';
 const AUTH_STORAGE_KEY = 'auth_user';
 const CURRENT_USER_STORAGE_KEY = 'currentUser';
 
+// Refresh token 5 minutes before expiry
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
 interface AuthUser {
   sub: string;
   email?: string;
   access_token: string;
   id_token: string;
+  refresh_token?: string;
   expires_at: number;
 }
 
@@ -62,27 +66,127 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [user]);
 
-  // Initialize from storage
+  // Refresh token using refresh_token grant
+  const refreshAccessToken = useCallback(async (currentUser: AuthUser): Promise<AuthUser | null> => {
+    if (!currentUser.refresh_token) {
+      return null;
+    }
+
+    try {
+      const response = await oauth.refreshTokenGrantRequest(
+        authorizationServer,
+        client,
+        oauth.None(),
+        currentUser.refresh_token
+      );
+
+      const result = await oauth.processRefreshTokenResponse(
+        authorizationServer,
+        client,
+        response
+      );
+
+      const newUser: AuthUser = {
+        ...currentUser,
+        access_token: result.access_token,
+        id_token: result.id_token ?? currentUser.id_token,
+        refresh_token: result.refresh_token ?? currentUser.refresh_token,
+        expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
+      };
+
+      await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
+      return newUser;
+    } catch {
+      // Refresh failed, user needs to re-authenticate
+      return null;
+    }
+  }, []);
+
+  // Initialize from storage and handle token refresh
   useEffect(() => {
-    chrome.storage.local.get([AUTH_STORAGE_KEY], (result) => {
+    const initAuth = async () => {
+      const result = await chrome.storage.local.get([AUTH_STORAGE_KEY]);
       const savedUser = result[AUTH_STORAGE_KEY] as AuthUser | undefined;
 
-      if (savedUser && savedUser.expires_at > Date.now()) {
+      if (!savedUser) {
+        setIsLoading(false);
+        return;
+      }
+
+      const timeUntilExpiry = savedUser.expires_at - Date.now();
+
+      // Token is expired or about to expire
+      if (timeUntilExpiry < TOKEN_REFRESH_BUFFER_MS) {
+        const refreshedUser = await refreshAccessToken(savedUser);
+        if (refreshedUser) {
+          setUser(refreshedUser);
+          setIsAuthenticated(true);
+          chrome.storage.local.set({
+            [CURRENT_USER_STORAGE_KEY]: {
+              id: refreshedUser.sub,
+              email: refreshedUser.email,
+            },
+          });
+        } else {
+          // Refresh failed, clear auth
+          chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
+        }
+      } else {
+        // Token is still valid
         setUser(savedUser);
         setIsAuthenticated(true);
-        // Ensure currentUser is set for content script
         chrome.storage.local.set({
           [CURRENT_USER_STORAGE_KEY]: {
             id: savedUser.sub,
             email: savedUser.email,
           },
         });
-      } else if (savedUser) {
+      }
+
+      setIsLoading(false);
+    };
+
+    initAuth();
+  }, [refreshAccessToken]);
+
+  // Auto-refresh token before expiry
+  useEffect(() => {
+    if (!user?.refresh_token || !user.expires_at) {
+      return;
+    }
+
+    const timeUntilRefresh = user.expires_at - Date.now() - TOKEN_REFRESH_BUFFER_MS;
+
+    // If already past refresh time, refresh immediately
+    if (timeUntilRefresh <= 0) {
+      refreshAccessToken(user).then((refreshedUser) => {
+        if (refreshedUser) {
+          setUser(refreshedUser);
+        } else {
+          // Refresh failed, sign out
+          setUser(null);
+          setIsAuthenticated(false);
+          chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
+        }
+      });
+      return;
+    }
+
+    // Schedule refresh before expiry
+    const timerId = setTimeout(async () => {
+      const refreshedUser = await refreshAccessToken(user);
+      if (refreshedUser) {
+        setUser(refreshedUser);
+      } else {
+        // Refresh failed, sign out
+        setUser(null);
+        setIsAuthenticated(false);
         chrome.storage.local.remove([AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY]);
       }
-      setIsLoading(false);
-    });
-  }, []);
+    }, timeUntilRefresh);
+
+    return () => clearTimeout(timerId);
+  }, [user, refreshAccessToken]);
 
   const signIn = useCallback(async () => {
     const redirectUri = chrome.identity.getRedirectURL();
@@ -92,7 +196,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
 
     // Build authorization URL
-    const authUrl = new URL(authorizationServer.authorization_endpoint!);
+    const authUrl = new URL(authorizationServer.authorization_endpoint as string);
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -138,13 +242,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
             response
           );
 
-          const claims = oauth.getValidatedIdTokenClaims(result)!;
+          const claims = oauth.getValidatedIdTokenClaims(result);
+          if (!claims || !result.id_token) {
+            throw new Error('Missing ID token claims');
+          }
 
           const newUser: AuthUser = {
             sub: claims.sub,
             email: claims.email as string | undefined,
             access_token: result.access_token,
-            id_token: result.id_token!,
+            id_token: result.id_token,
+            refresh_token: result.refresh_token,
             expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
           };
 

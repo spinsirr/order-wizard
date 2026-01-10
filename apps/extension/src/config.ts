@@ -48,7 +48,14 @@ export class LocalStorageRepository {
 
   async save(order: Order): Promise<void> {
     const orders = await this.getAllOrders();
-    orders.push(order);
+    const existingIndex = orders.findIndex((o) => o.id === order.id);
+    if (existingIndex !== -1) {
+      // Update existing order
+      orders[existingIndex] = order;
+    } else {
+      // Insert new order
+      orders.push(order);
+    }
     await this.saveAllOrders(orders);
   }
 

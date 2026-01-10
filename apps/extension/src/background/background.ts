@@ -14,10 +14,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
     case 'ORDER_SAVED':
       console.log('📦 New order saved:', message.payload as Order);
-      chrome.runtime.sendMessage({
-        type: 'ORDER_SAVED_BROADCAST',
-        order: message.payload,
-      });
+      chrome.runtime
+        .sendMessage({
+          type: 'ORDER_SAVED_BROADCAST',
+          order: message.payload,
+        })
+        .catch(() => {
+          // Side panel not open, ignore
+        });
       break;
 
     case 'PING':
@@ -34,10 +38,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.storage.local.onChanged.addListener((changes) => {
   if (changes.orders) {
     console.log('💾 Orders storage updated');
-    chrome.runtime.sendMessage({
-      type: 'ORDERS_UPDATED',
-      orders: changes.orders.newValue || [],
-    });
+    // Send message to side panel if open (ignore errors if not open)
+    chrome.runtime
+      .sendMessage({
+        type: 'ORDERS_UPDATED',
+        orders: changes.orders.newValue || [],
+      })
+      .catch(() => {
+        // Side panel not open, ignore
+      });
   }
 });
 

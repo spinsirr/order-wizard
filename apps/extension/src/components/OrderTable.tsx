@@ -112,7 +112,6 @@ export function OrderTable() {
     const orderIds = new Set(displayOrders.map((o) => o.id));
     setSelectedIds((previous) => {
       const stillValid = [...previous].filter((id) => orderIds.has(id));
-      // Only update if something changed
       if (stillValid.length === previous.size) {
         return previous;
       }
@@ -126,7 +125,7 @@ export function OrderTable() {
   const hasSelection = selectedCount > 0;
 
   const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? new Set(displayOrders.map((order) => order.id)) : new Set());
+    setSelectedIds(checked ? new Set(displayOrders.map((order) => order.id)) : new Set<string>());
   };
 
   const toggleSelect = (orderId: string) => {
@@ -162,7 +161,9 @@ export function OrderTable() {
     await deleteOrdersMutation.mutateAsync(idsToDelete);
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      idsToDelete.forEach((id) => next.delete(id));
+      for (const id of idsToDelete) {
+        next.delete(id);
+      }
       return next;
     });
     setConfirmData(null);

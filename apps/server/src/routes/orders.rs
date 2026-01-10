@@ -29,6 +29,7 @@ pub fn router() -> OpenApiRouter {
     security(("bearer_auth" = []))
 )]
 async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
+    tracing::info!("GET /orders - user: {}", claims.sub);
     let collection = orders_collection();
 
     let filter = doc! { "user_id": &claims.sub };
@@ -48,6 +49,7 @@ async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
+    tracing::info!("GET /orders - returning {} orders", orders.len());
     (StatusCode::OK, Json(orders))
 }
 
@@ -68,6 +70,7 @@ async fn create_order(
     AuthUser(claims): AuthUser,
     Json(payload): Json<CreateOrderRequest>,
 ) -> impl IntoResponse {
+    tracing::info!("POST /orders - user: {}, order_number: {}", claims.sub, payload.order_number);
     let collection = orders_collection();
 
     let order = Order {
@@ -83,7 +86,10 @@ async fn create_order(
     };
 
     match collection.insert_one(&order).await {
-        Ok(_) => (StatusCode::CREATED, Json(order)),
+        Ok(_) => {
+            tracing::info!("POST /orders - created order: {}", order.id);
+            (StatusCode::CREATED, Json(order))
+        }
         Err(e) => {
             tracing::error!("Failed to create order: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(order))
@@ -108,13 +114,20 @@ async fn create_order(
     security(("bearer_auth" = []))
 )]
 async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
+    tracing::info!("GET /orders/{} - user: {}", id, claims.sub);
     let collection = orders_collection();
 
     let filter = doc! { "id": &id, "user_id": &claims.sub };
 
     match collection.find_one(filter).await {
-        Ok(Some(order)) => (StatusCode::OK, Json(Some(order))),
-        Ok(None) => (StatusCode::NOT_FOUND, Json(None)),
+        Ok(Some(order)) => {
+            tracing::info!("GET /orders/{} - found", id);
+            (StatusCode::OK, Json(Some(order)))
+        }
+        Ok(None) => {
+            tracing::warn!("GET /orders/{} - not found", id);
+            (StatusCode::NOT_FOUND, Json(None))
+        }
         Err(e) => {
             tracing::error!("Failed to get order: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(None))
@@ -145,6 +158,7 @@ async fn update_order(
     Path(id): Path<String>,
     Json(payload): Json<UpdateOrderRequest>,
 ) -> impl IntoResponse {
+    tracing::info!("PATCH /orders/{} - user: {}", id, claims.sub);
     let collection = orders_collection();
 
     let filter = doc! { "id": &id, "user_id": &claims.sub };
@@ -170,8 +184,14 @@ async fn update_order(
     let update = doc! { "$set": update_doc };
 
     match collection.update_one(filter, update).await {
-        Ok(result) if result.matched_count > 0 => StatusCode::OK,
-        Ok(_) => StatusCode::NOT_FOUND,
+        Ok(result) if result.matched_count > 0 => {
+            tracing::info!("PATCH /orders/{} - updated", id);
+            StatusCode::OK
+        }
+        Ok(_) => {
+            tracing::warn!("PATCH /orders/{} - not found", id);
+            StatusCode::NOT_FOUND
+        }
         Err(e) => {
             tracing::error!("Failed to update order: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -196,13 +216,20 @@ async fn update_order(
     security(("bearer_auth" = []))
 )]
 async fn delete_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
+    tracing::info!("DELETE /orders/{} - user: {}", id, claims.sub);
     let collection = orders_collection();
 
     let filter = doc! { "id": &id, "user_id": &claims.sub };
 
     match collection.delete_one(filter).await {
-        Ok(result) if result.deleted_count > 0 => StatusCode::NO_CONTENT,
-        Ok(_) => StatusCode::NOT_FOUND,
+        Ok(result) if result.deleted_count > 0 => {
+            tracing::info!("DELETE /orders/{} - deleted", id);
+            StatusCode::NO_CONTENT
+        }
+        Ok(_) => {
+            tracing::warn!("DELETE /orders/{} - not found", id);
+            StatusCode::NOT_FOUND
+        }
         Err(e) => {
             tracing::error!("Failed to delete order: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

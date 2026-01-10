@@ -1,3 +1,6 @@
+# CI checks (used by pre-commit hook)
+ci: typecheck lint check-server
+
 # Start MongoDB
 db:
     docker-compose up -d mongodb
@@ -12,7 +15,7 @@ dev: db
     #!/usr/bin/env bash
     trap 'kill 0' EXIT SIGINT SIGTERM
     (cd apps/extension && bun run dev) &
-    (cd apps/server && cargo run) &
+    (cd apps/server && cargo watch -x run) &
     wait
 
 # Stop all dev processes
@@ -32,12 +35,24 @@ build-extension:
 lint-extension:
     cd apps/extension && bun run lint
 
+lint:
+    cd apps/extension && bun run lint
+
+lint-fix:
+    cd apps/extension && bun run lint:fix
+
+format:
+    cd apps/extension && bun run format
+
 typecheck-extension:
+    cd apps/extension && bun run typecheck
+
+typecheck:
     cd apps/extension && bun run typecheck
 
 # Server commands
 dev-server:
-    cd apps/server && cargo run
+    cd apps/server && cargo watch -x run
 
 build-server:
     cd apps/server && cargo build --release
