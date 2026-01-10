@@ -68,8 +68,7 @@ export function useUpdateOrderStatus() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
-      // Trigger cloud sync
-      chrome.runtime.sendMessage({ type: 'ORDER_UPDATED' }).catch(() => {});
+      // Sync triggered automatically via chrome.storage.onChanged
     },
   });
 }
@@ -115,8 +114,7 @@ export function useDeleteOrders() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
-      // Trigger cloud sync
-      chrome.runtime.sendMessage({ type: 'ORDER_DELETED' }).catch(() => {});
+      // Sync triggered automatically via chrome.storage.onChanged
     },
   });
 }
