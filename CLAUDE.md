@@ -9,32 +9,29 @@ Amazon Order Wizard - A browser extension for tracking Amazon orders with cloud 
 ## Commands
 
 ```bash
-# Development
-just dev                # Start MongoDB + extension dev server + Rust server
-just stop               # Kill all dev processes
-just dev-extension      # Extension dev server only
-just dev-server         # Rust server only (with cargo watch)
+# Run `just` to see all available commands
 
-# Database
-just db                 # Start MongoDB via docker-compose
-just db-stop            # Stop MongoDB
+# Development
+just dev          # Start MongoDB + extension dev server + Rust server
+just stop         # Kill all dev processes
 
 # Build
-just build              # Build extension + server
-just build-extension    # Extension production build
-just build-server       # Server release build
+just build        # Build extension + server
 
 # Code Quality
-just check              # Run all checks (typecheck + clippy + lint)
-just typecheck          # TypeScript check
-just lint               # Biome lint
-just lint-fix           # Biome lint with auto-fix
-just format             # Biome format
-just check-server       # Cargo clippy
+just check        # Run all checks (typecheck + lint + clippy)
+just typecheck    # TypeScript check
+just lint         # Biome lint
+just lint-fix     # Biome lint with auto-fix
+just format       # Biome format
+
+# Database
+just db           # Start MongoDB via docker-compose
+just db-stop      # Stop MongoDB
 
 # Other
-just install            # Install dependencies
-just clean              # Clean all build artifacts
+just install      # Install dependencies
+just clean        # Clean all build artifacts
 ```
 
 ## Architecture
@@ -45,17 +42,26 @@ just clean              # Clean all build artifacts
 - Package manager: Bun (workspaces in `apps/*`)
 
 ### Authentication Flow
-1. Cognito OIDC authorization code flow via react-oidc-context
+1. Cognito OIDC authorization code flow via oauth4webapi
 2. Extension receives JWT access token
-3. Token set on ApiRepository via `useAccessToken` hook
+3. Token set on ApiRepository via AuthContext effect
 4. Server validates JWT against Cognito JWKS (cached 1 hour)
 
-### Repository Pattern (apps/extension/src/config.ts)
-- **LocalStorageRepository**: `chrome.storage.local`, works offline
-- **ApiRepository**: HTTP client for cloud API, requires auth token
-- `useRepository()` hook returns apiRepository when authenticated, localRepository otherwise
+### Extension Structure (apps/extension/src/)
+```
+src/
+├── lib/           # Utilities (cn.ts, errors.ts)
+├── config/        # OAuth config, repository instances
+├── repositories/  # ApiRepository, LocalStorageRepository
+├── hooks/         # useOrders (CRUD), useCloudSync (sync)
+├── contexts/      # AuthContext
+├── components/    # React components
+├── constants/     # Shared constants
+├── types/         # TypeScript types
+└── content/       # Content scripts for Amazon pages
+```
 
-### Data Sync (apps/extension/src/hooks/useOrderSync.ts)
+### Data Sync (apps/extension/src/hooks/useCloudSync.ts)
 - Offline-first: orders stored locally, synced to cloud when authenticated
 - Conflict resolution: `updatedAt` timestamp comparison (last write wins)
 - Soft delete: local orders marked with `deletedAt` for sync tracking
@@ -71,28 +77,31 @@ Uncommented → Commented → CommentRevealed → Reimbursed
 - No try-catch blocks for error suppression
 - React Query handles error states for async operations
 - ErrorBoundary catches React render errors at top level
-- Rust uses `?` operator to propagate errors, panics for unrecoverable states
+- Rust uses `?` operator with `AppError` type, panics for unrecoverable states
 
 ## Key Files
 
 ### Extension
 | File | Purpose |
 |------|---------|
-| config.ts | OAuth config, repository implementations |
-| hooks/useOrderSync.ts | Bidirectional sync with conflict resolution |
-| hooks/useOrders.ts | Order CRUD hooks |
+| config/index.ts | Repository instances, environment config |
+| config/oauth.ts | OAuth configuration for Cognito |
+| repositories/ApiRepository.ts | HTTP client for cloud sync (batch operations) |
+| repositories/LocalStorageRepository.ts | Chrome storage wrapper |
+| hooks/useOrders.ts | Local order CRUD hooks |
+| hooks/useCloudSync.ts | Bidirectional sync with conflict resolution |
+| contexts/AuthContext.tsx | OAuth state, token management |
 | content/content.ts | Injects save buttons on Amazon pages |
-| content/scraper.ts | Extracts order data from Amazon DOM |
-| store/orderStore.ts | Zustand store for UI state + CSV export |
 
 ### Server
 | File | Purpose |
 |------|---------|
 | main.rs | Server setup, routes, CORS |
+| errors.rs | AppError type with IntoResponse impl |
 | auth/mod.rs | JWT validation middleware, JWKS fetching |
 | routes/orders.rs | Order CRUD handlers |
-| models.rs | Order struct, request/response types |
-| db.rs | MongoDB connection singleton |
+| models.rs | Order struct, OrderStatus enum |
+| db.rs | MongoDB connection, index creation |
 
 ## API Endpoints
 
@@ -101,10 +110,19 @@ Uncommented → Commented → CommentRevealed → Reimbursed
 | GET | /health | No | Health check |
 | GET | /me | Yes | Current user info from JWT |
 | GET | /orders | Yes | List user's orders |
-| POST | /orders | Yes | Create/upsert order |
+| POST | /orders | Yes | Upsert order (by order_number) |
+| GET | /orders/:id | Yes | Get single order |
 | PATCH | /orders/:id | Yes | Update order |
 | DELETE | /orders/:id | Yes | Delete order |
 | GET | /swagger-ui | No | API documentation |
+
+## Database
+
+### MongoDB Indices
+Created automatically on startup:
+- `user_id` - for listing user's orders
+- `(user_id, order_number)` - unique, for upsert
+- `(id, user_id)` - for single order lookup
 
 ## Environment Variables
 
@@ -119,7 +137,8 @@ VITE_API_BASE_URL=http://localhost:3000
 ### Server (.env)
 ```
 MONGODB_URI=mongodb://localhost:27017
-COGNITO_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
+OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
+OIDC_CLIENT_ID=<client-id>
 ```
 
 ## Data Model
@@ -138,5 +157,26 @@ interface Order {
   updatedAt?: string;   // ISO timestamp for sync
   createdAt?: string;
   deletedAt?: string;   // Soft delete timestamp
+}
+```
+
+## Error Handling (Server)
+
+```rust
+// AppError converts to proper HTTP responses
+pub enum AppError {
+    NotFound(&'static str),      // 404 + { code, message }
+    BadRequest(String),          // 400 + { code, message }
+    Database(String),            // 500 + { code, message }
+}
+
+// Usage in handlers
+async fn get_order(...) -> AppResult<Json<Order>> {
+    let order = orders_collection()
+        .find_one(filter)
+        .await
+        .map_err(AppError::database)?
+        .ok_or_else(|| AppError::not_found("Order"))?;
+    Ok(Json(order))
 }
 ```
