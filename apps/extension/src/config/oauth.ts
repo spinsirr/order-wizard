@@ -1,4 +1,4 @@
-import * as oauth from 'oauth4webapi';
+import type * as oauth from 'oauth4webapi';
 
 // OAuth configuration from environment
 const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN;
