@@ -62,3 +62,8 @@ clean:
 # Install dependencies
 install:
     cd apps/extension && bun install
+
+# Setup git hooks
+setup:
+    git config core.hooksPath .githooks
+    @echo "Git hooks configured"

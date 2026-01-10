@@ -68,22 +68,6 @@ jobs:
         working-directory: apps/extension
         run: bun run lint
 
-      - name: Sync version to all packages
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          VERSION="${{ steps.version.outputs.current }}"
-
-          # Sync to extension package.json
-          jq --arg v "$VERSION" '.version = $v' apps/extension/package.json > tmp.json
-          mv tmp.json apps/extension/package.json
-
-          # Sync to extension manifest.json
-          jq --arg v "$VERSION" '.version = $v' apps/extension/public/manifest.json > tmp.json
-          mv tmp.json apps/extension/public/manifest.json
-
-          # Sync to server Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" apps/server/Cargo.toml
-
       - name: Build
         if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension

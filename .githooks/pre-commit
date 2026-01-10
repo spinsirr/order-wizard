@@ -1,0 +1,26 @@
+#!/bin/bash
+# Pre-commit hook: sync versions if package.json changed
+
+# Check if package.json is staged
+if git diff --cached --name-only | grep -q "^package.json$"; then
+  echo "package.json changed, syncing versions..."
+
+  ROOT_DIR="$(git rev-parse --show-toplevel)"
+  VERSION=$(jq -r '.version' "$ROOT_DIR/package.json")
+
+  # Sync to extension package.json
+  jq --arg v "$VERSION" '.version = $v' "$ROOT_DIR/apps/extension/package.json" > tmp.json
+  mv tmp.json "$ROOT_DIR/apps/extension/package.json"
+  git add "$ROOT_DIR/apps/extension/package.json"
+
+  # Sync to extension manifest.json
+  jq --arg v "$VERSION" '.version = $v' "$ROOT_DIR/apps/extension/public/manifest.json" > tmp.json
+  mv tmp.json "$ROOT_DIR/apps/extension/public/manifest.json"
+  git add "$ROOT_DIR/apps/extension/public/manifest.json"
+
+  # Sync to server Cargo.toml
+  sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$ROOT_DIR/apps/server/Cargo.toml"
+  git add "$ROOT_DIR/apps/server/Cargo.toml"
+
+  echo "Synced version $VERSION to all packages"
+fi
