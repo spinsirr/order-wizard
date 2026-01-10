@@ -79,6 +79,120 @@ Uncommented → Commented → CommentRevealed → Reimbursed
 - ErrorBoundary catches React render errors at top level
 - Rust uses `?` operator with `AppError` type, panics for unrecoverable states
 
+**Local-First** - localStorage is the source of truth:
+- All reads/writes go to localStorage immediately
+- Cloud sync happens on login + manual trigger
+- Works offline, syncs when connected
+
+**Keep It Simple**:
+- Prefer local state (`useState`) over global state when possible
+- No state management libraries unless truly needed
+- Small, focused components over large "god" components
+
+## Code Conventions
+
+### TypeScript/React
+
+**Imports** - Use path aliases:
+```typescript
+import { useAuth } from '@/contexts/AuthContext';  // Good
+import { useAuth } from '../../../contexts/AuthContext';  // Avoid
+```
+
+**Components** - Keep focused and small:
+```typescript
+// Good: Single responsibility
+function OrderCard({ order, onStatusChange }: OrderCardProps) { ... }
+function OrderTableToolbar({ onSearch, onExport }: ToolbarProps) { ... }
+
+// Avoid: God components with 500+ lines
+function OrderTable() { /* everything here */ }
+```
+
+**Hooks** - Separate concerns:
+```typescript
+// useOrders.ts - Local CRUD operations
+export function useOrders() { ... }
+export function useUpdateOrderStatus() { ... }
+export function useDeleteOrders() { ... }
+
+// useCloudSync.ts - Cloud sync logic
+export function useCloudSync() { ... }
+```
+
+**State** - Prefer local over global:
+```typescript
+// Good: Local state in component
+const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+// Avoid: Global state for UI-only concerns
+const useStore = create((set) => ({ selectedIds: new Set(), ... }));
+```
+
+**Styling** - Use cn() for conditional classes:
+```typescript
+import { cn } from '@/lib/cn';
+
+<div className={cn(
+  "base-classes",
+  isActive && "active-classes",
+  variant === "primary" && "primary-classes"
+)} />
+```
+
+### React Query Patterns
+
+**Queries** - For reading data:
+```typescript
+const { data: orders, isLoading, error } = useQuery({
+  queryKey: ORDERS_KEY,
+  queryFn: async () => localRepository.getAll(),
+});
+```
+
+**Mutations** - With optimistic updates:
+```typescript
+const mutation = useMutation({
+  mutationFn: async (data) => { ... },
+  onMutate: async (data) => {
+    await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
+    const previous = queryClient.getQueryData(ORDERS_KEY);
+    queryClient.setQueryData(ORDERS_KEY, (old) => /* optimistic update */);
+    return { previous };
+  },
+  onError: (err, data, context) => {
+    queryClient.setQueryData(ORDERS_KEY, context?.previous);
+  },
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+  },
+});
+```
+
+### Rust
+
+**Error Handling** - Use `?` operator with custom error types:
+```rust
+async fn handler() -> AppResult<Json<Data>> {
+    let result = some_operation()
+        .await
+        .map_err(AppError::database)?;
+    Ok(Json(result))
+}
+```
+
+**Avoid** manual match blocks for errors:
+```rust
+// Avoid
+match collection.find(filter).await {
+    Ok(cursor) => cursor,
+    Err(e) => {
+        tracing::error!("Failed: {}", e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new()));
+    }
+}
+```
+
 ## Key Files
 
 ### Extension
@@ -157,26 +271,5 @@ interface Order {
   updatedAt?: string;   // ISO timestamp for sync
   createdAt?: string;
   deletedAt?: string;   // Soft delete timestamp
-}
-```
-
-## Error Handling (Server)
-
-```rust
-// AppError converts to proper HTTP responses
-pub enum AppError {
-    NotFound(&'static str),      // 404 + { code, message }
-    BadRequest(String),          // 400 + { code, message }
-    Database(String),            // 500 + { code, message }
-}
-
-// Usage in handlers
-async fn get_order(...) -> AppResult<Json<Order>> {
-    let order = orders_collection()
-        .find_one(filter)
-        .await
-        .map_err(AppError::database)?
-        .ok_or_else(|| AppError::not_found("Order"))?;
-    Ok(Json(order))
 }
 ```
