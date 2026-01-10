@@ -10,6 +10,17 @@ pub enum OrderStatus {
     Reimbursed,
 }
 
+impl OrderStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OrderStatus::Uncommented => "uncommented",
+            OrderStatus::Commented => "commented",
+            OrderStatus::CommentRevealed => "comment_revealed",
+            OrderStatus::Reimbursed => "reimbursed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
@@ -36,6 +47,15 @@ pub struct Order {
     /// Optional user note
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// ISO 8601 timestamp for sync conflict resolution
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// ISO 8601 timestamp when order was created
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    /// ISO 8601 timestamp for soft delete
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -50,6 +70,12 @@ pub struct CreateOrderRequest {
     pub status: OrderStatus,
     #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -57,4 +83,6 @@ pub struct CreateOrderRequest {
 pub struct UpdateOrderRequest {
     pub status: Option<OrderStatus>,
     pub note: Option<String>,
+    pub updated_at: Option<String>,
+    pub deleted_at: Option<String>,
 }

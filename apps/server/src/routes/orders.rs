@@ -1,10 +1,11 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, Json};
 use futures::TryStreamExt;
 use mongodb::bson::doc;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::auth::{AuthError, AuthUser};
 use crate::db::orders_collection;
+use crate::errors::{AppError, AppResult};
 use crate::models::{CreateOrderRequest, Order, UpdateOrderRequest};
 
 pub fn router() -> OpenApiRouter {
@@ -28,29 +29,19 @@ pub fn router() -> OpenApiRouter {
     ),
     security(("bearer_auth" = []))
 )]
-async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
+async fn list_orders(AuthUser(claims): AuthUser) -> AppResult<Json<Vec<Order>>> {
     tracing::info!("GET /orders - user: {}", claims.sub);
-    let collection = orders_collection();
 
-    let filter = doc! { "user_id": &claims.sub };
-    let cursor = match collection.find(filter).await {
-        Ok(cursor) => cursor,
-        Err(e) => {
-            tracing::error!("Failed to query orders: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::<Order>::new()));
-        }
-    };
-
-    let orders: Vec<Order> = match cursor.try_collect().await {
-        Ok(orders) => orders,
-        Err(e) => {
-            tracing::error!("Failed to collect orders: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::<Order>::new()));
-        }
-    };
+    let orders: Vec<Order> = orders_collection()
+        .find(doc! { "user_id": &claims.sub })
+        .await
+        .map_err(AppError::database)?
+        .try_collect()
+        .await
+        .map_err(AppError::database)?;
 
     tracing::info!("GET /orders - returning {} orders", orders.len());
-    (StatusCode::OK, Json(orders))
+    Ok(Json(orders))
 }
 
 #[utoipa::path(
@@ -58,7 +49,7 @@ async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
     path = "/orders",
     tag = "Orders",
     summary = "Create a new order",
-    description = "Creates a new order for the authenticated user",
+    description = "Creates a new order for the authenticated user (upsert by order_number)",
     request_body = CreateOrderRequest,
     responses(
         (status = 201, description = "Order created successfully", body = Order),
@@ -69,9 +60,12 @@ async fn list_orders(AuthUser(claims): AuthUser) -> impl IntoResponse {
 async fn create_order(
     AuthUser(claims): AuthUser,
     Json(payload): Json<CreateOrderRequest>,
-) -> impl IntoResponse {
-    tracing::info!("POST /orders - user: {}, order_number: {}", claims.sub, payload.order_number);
-    let collection = orders_collection();
+) -> AppResult<(StatusCode, Json<Order>)> {
+    tracing::info!(
+        "POST /orders - user: {}, order_number: {}",
+        claims.sub,
+        payload.order_number
+    );
 
     let order = Order {
         id: payload.id,
@@ -83,18 +77,21 @@ async fn create_order(
         price: payload.price,
         status: payload.status,
         note: payload.note,
+        updated_at: payload.updated_at,
+        created_at: payload.created_at,
+        deleted_at: payload.deleted_at,
     };
 
-    match collection.insert_one(&order).await {
-        Ok(_) => {
-            tracing::info!("POST /orders - created order: {}", order.id);
-            (StatusCode::CREATED, Json(order))
-        }
-        Err(e) => {
-            tracing::error!("Failed to create order: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(order))
-        }
-    }
+    // Upsert: update if exists, insert if not
+    let filter = doc! { "order_number": &order.order_number, "user_id": &order.user_id };
+    orders_collection()
+        .replace_one(filter, &order)
+        .upsert(true)
+        .await
+        .map_err(AppError::database)?;
+
+    tracing::info!("POST /orders - upserted order: {}", order.id);
+    Ok((StatusCode::CREATED, Json(order)))
 }
 
 #[utoipa::path(
@@ -113,26 +110,16 @@ async fn create_order(
     ),
     security(("bearer_auth" = []))
 )]
-async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
+async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> AppResult<Json<Order>> {
     tracing::info!("GET /orders/{} - user: {}", id, claims.sub);
-    let collection = orders_collection();
 
-    let filter = doc! { "id": &id, "user_id": &claims.sub };
+    let order = orders_collection()
+        .find_one(doc! { "id": &id, "user_id": &claims.sub })
+        .await
+        .map_err(AppError::database)?
+        .ok_or_else(|| AppError::not_found("Order"))?;
 
-    match collection.find_one(filter).await {
-        Ok(Some(order)) => {
-            tracing::info!("GET /orders/{} - found", id);
-            (StatusCode::OK, Json(Some(order)))
-        }
-        Ok(None) => {
-            tracing::warn!("GET /orders/{} - not found", id);
-            (StatusCode::NOT_FOUND, Json(None))
-        }
-        Err(e) => {
-            tracing::error!("Failed to get order: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(None))
-        }
-    }
+    Ok(Json(order))
 }
 
 #[utoipa::path(
@@ -157,46 +144,42 @@ async fn update_order(
     AuthUser(claims): AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<UpdateOrderRequest>,
-) -> impl IntoResponse {
+) -> AppResult<StatusCode> {
     tracing::info!("PATCH /orders/{} - user: {}", id, claims.sub);
-    let collection = orders_collection();
-
-    let filter = doc! { "id": &id, "user_id": &claims.sub };
 
     let mut update_doc = doc! {};
+
     if let Some(status) = &payload.status {
-        let status_str = match status {
-            crate::models::OrderStatus::Uncommented => "uncommented",
-            crate::models::OrderStatus::Commented => "commented",
-            crate::models::OrderStatus::CommentRevealed => "comment_revealed",
-            crate::models::OrderStatus::Reimbursed => "reimbursed",
-        };
-        update_doc.insert("status", status_str);
+        update_doc.insert("status", status.as_str());
     }
     if let Some(note) = &payload.note {
         update_doc.insert("note", note);
     }
+    if let Some(updated_at) = &payload.updated_at {
+        update_doc.insert("updated_at", updated_at);
+    }
+    if let Some(deleted_at) = &payload.deleted_at {
+        update_doc.insert("deleted_at", deleted_at);
+    }
 
     if update_doc.is_empty() {
-        return StatusCode::BAD_REQUEST;
+        return Err(AppError::bad_request("No fields to update"));
     }
 
-    let update = doc! { "$set": update_doc };
+    let result = orders_collection()
+        .update_one(
+            doc! { "id": &id, "user_id": &claims.sub },
+            doc! { "$set": update_doc },
+        )
+        .await
+        .map_err(AppError::database)?;
 
-    match collection.update_one(filter, update).await {
-        Ok(result) if result.matched_count > 0 => {
-            tracing::info!("PATCH /orders/{} - updated", id);
-            StatusCode::OK
-        }
-        Ok(_) => {
-            tracing::warn!("PATCH /orders/{} - not found", id);
-            StatusCode::NOT_FOUND
-        }
-        Err(e) => {
-            tracing::error!("Failed to update order: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+    if result.matched_count == 0 {
+        return Err(AppError::not_found("Order"));
     }
+
+    tracing::info!("PATCH /orders/{} - updated", id);
+    Ok(StatusCode::OK)
 }
 
 #[utoipa::path(
@@ -215,24 +198,18 @@ async fn update_order(
     ),
     security(("bearer_auth" = []))
 )]
-async fn delete_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> impl IntoResponse {
+async fn delete_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> AppResult<StatusCode> {
     tracing::info!("DELETE /orders/{} - user: {}", id, claims.sub);
-    let collection = orders_collection();
 
-    let filter = doc! { "id": &id, "user_id": &claims.sub };
+    let result = orders_collection()
+        .delete_one(doc! { "id": &id, "user_id": &claims.sub })
+        .await
+        .map_err(AppError::database)?;
 
-    match collection.delete_one(filter).await {
-        Ok(result) if result.deleted_count > 0 => {
-            tracing::info!("DELETE /orders/{} - deleted", id);
-            StatusCode::NO_CONTENT
-        }
-        Ok(_) => {
-            tracing::warn!("DELETE /orders/{} - not found", id);
-            StatusCode::NOT_FOUND
-        }
-        Err(e) => {
-            tracing::error!("Failed to delete order: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+    if result.deleted_count == 0 {
+        return Err(AppError::not_found("Order"));
     }
+
+    tracing::info!("DELETE /orders/{} - deleted", id);
+    Ok(StatusCode::NO_CONTENT)
 }
