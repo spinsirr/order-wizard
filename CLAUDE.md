@@ -89,6 +89,21 @@ Uncommented → Commented → CommentRevealed → Reimbursed
 - No state management libraries unless truly needed
 - Small, focused components over large "god" components
 
+## Git Conventions
+
+**Commits** - Do NOT include "Generated with Claude" or AI attribution in commit messages, issues, or PRs.
+
+**Commit Message Format**:
+```
+type: short description
+
+Optional longer description.
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
+
 ## Code Conventions
 
 ### TypeScript/React
