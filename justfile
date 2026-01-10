@@ -1,3 +1,7 @@
+# List available commands
+default:
+    @just --list
+
 # CI checks (used by pre-commit hook)
 ci: typecheck lint check-server
 
