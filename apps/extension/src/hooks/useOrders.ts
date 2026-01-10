@@ -1,29 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { localRepository, apiRepository } from '@/config';
+import { localRepository } from '@/config';
 import { ORDERS_KEY, LOCAL_USER_ID } from '@/constants';
 import type { Order, OrderStatus } from '@/types';
 
 /**
  * Local-First Architecture:
- * - UI always reads from localStorage
- * - Writes go to localStorage first, then sync to cloud in background
- * - Sync mechanism handles cloud synchronization
+ * - All operations write to localStorage only
+ * - Cloud sync happens separately via useOrderSync
  */
 
-/**
- * Get the current userId for localStorage operations.
- * - Authenticated: user.sub
- * - Not authenticated: 'local'
- */
 function useCurrentUserId(): string {
   const { isAuthenticated, user } = useAuth();
   return isAuthenticated && user ? user.sub : LOCAL_USER_ID;
 }
 
 /**
- * Hook to read orders from localStorage.
- * Always reads from local - sync handles cloud synchronization.
+ * Read orders from localStorage
  */
 export function useOrders() {
   const { isAuthenticated, user } = useAuth();
@@ -31,54 +24,32 @@ export function useOrders() {
   return useQuery({
     queryKey: ORDERS_KEY,
     queryFn: async () => {
-      // Set userId scope for reading
-      if (isAuthenticated && user) {
-        localRepository.setCurrentUserId(user.sub);
-      } else {
-        localRepository.setCurrentUserId(LOCAL_USER_ID);
-      }
-
+      localRepository.setCurrentUserId(isAuthenticated && user ? user.sub : LOCAL_USER_ID);
       const orders = await localRepository.getAll();
-      // Filter out soft-deleted orders
       return orders.filter((order) => !order.deletedAt);
     },
-    staleTime: 1000 * 60, // 1 minute
+    staleTime: 1000 * 60,
   });
 }
 
 /**
- * Hook to update order status.
- * Writes to localStorage first, then syncs to cloud if authenticated.
+ * Update order status (local only, sync handles cloud)
  */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
   const userId = useCurrentUserId();
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
-      const now = new Date().toISOString();
-
-      // Always update local first
       localRepository.setCurrentUserId(userId);
-      await localRepository.update(id, { status, updatedAt: now });
-
-      // If authenticated, also update cloud (fire and forget, sync will fix any issues)
-      if (isAuthenticated && apiRepository) {
-        apiRepository.update(id, { status }).catch((err) => {
-          console.warn('Failed to sync status update to cloud:', err);
-        });
-      }
+      await localRepository.update(id, { status, updatedAt: new Date().toISOString() });
     },
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-
       const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-
       queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
         old?.map((order) => (order.id === id ? { ...order, status } : order))
       );
-
       return { previousOrders };
     },
     onError: (_err, _variables, context) => {
@@ -93,8 +64,7 @@ export function useUpdateOrderStatus() {
 }
 
 /**
- * Hook to delete orders.
- * Deletes from localStorage first, then syncs to cloud if authenticated.
+ * Delete orders (local only, sync handles cloud)
  */
 export function useDeleteOrders() {
   const queryClient = useQueryClient();
@@ -103,25 +73,16 @@ export function useDeleteOrders() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const now = new Date().toISOString();
-
       localRepository.setCurrentUserId(userId);
 
-      if (isAuthenticated && apiRepository) {
-        // When authenticated: soft-delete locally (for sync tracking), delete from cloud
+      if (isAuthenticated) {
+        // Soft-delete for sync tracking
         for (const id of ids) {
-          await localRepository.update(id, { deletedAt: now });
-        }
-
-        // Delete from cloud (fire and forget)
-        for (const id of ids) {
-          apiRepository.delete(id).catch((err) => {
-            console.warn('Failed to delete from cloud:', err);
-          });
+          await localRepository.update(id, { deletedAt: new Date().toISOString() });
         }
       } else {
-        // When not authenticated: hard delete + track orderNumbers for later sync
-        localRepository.setCurrentUserId(null); // Get all orders to find the ones to delete
+        // Hard delete + track for later sync
+        localRepository.setCurrentUserId(null);
         const orders = await localRepository.getAll();
         const ordersToDelete = orders.filter((o) => ids.includes(o.id));
 
@@ -133,14 +94,10 @@ export function useDeleteOrders() {
     },
     onMutate: async (ids) => {
       await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-
       const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-
-      // Optimistically remove from UI
       queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
         old?.filter((order) => !ids.includes(order.id))
       );
-
       return { previousOrders };
     },
     onError: (_err, _variables, context) => {
@@ -155,8 +112,7 @@ export function useDeleteOrders() {
 }
 
 /**
- * Hook to save a new order.
- * Saves to localStorage - sync will upload to cloud.
+ * Save a new order (local only, sync handles cloud)
  */
 export function useSaveOrder() {
   const queryClient = useQueryClient();

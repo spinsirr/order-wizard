@@ -10,7 +10,7 @@ import type { Order } from '@/types';
  * Local-First Sync Strategy:
  *
  * 1. Local storage is the source of truth for the UI
- * 2. Sync uploads local changes to cloud (one-way push)
+ * 2. Sync uploads local changes to cloud (batch)
  * 3. On first sync after login, merge cloud data with local
  * 4. Conflicts: local wins (user's most recent action takes precedence)
  */
@@ -40,23 +40,18 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
 
   // Step 1: Process local orders that need to go to cloud
   for (const localOrder of allLocalOrders) {
-    // Skip soft-deleted orders - they'll be handled separately
     if (localOrder.deletedAt) continue;
 
     const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
 
     if (localOrder.userId === LOCAL_USER_ID) {
-      // Anonymous order - needs to be uploaded with real userId
       if (!cloudOrder) {
         ordersToUpload.push({ ...localOrder, userId });
       }
-      // If cloud already has it, we'll keep local as-is (userId will stay 'local' until next save)
     } else if (localOrder.userId === userId) {
-      // User's order - upload if cloud doesn't have it or local is newer
       if (!cloudOrder) {
         ordersToUpload.push(localOrder);
       } else {
-        // Compare timestamps - local wins ties
         const localTime = localOrder.updatedAt ? new Date(localOrder.updatedAt).getTime() : 0;
         const cloudTime = cloudOrder.updatedAt ? new Date(cloudOrder.updatedAt).getTime() : 0;
         if (localTime >= cloudTime) {
@@ -67,7 +62,6 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
   }
 
   // Step 2: Download cloud orders that don't exist locally
-  // BUT skip orders that were deleted locally (tracked in deletedOrderNumbers)
   const deletedSet = new Set(deletedOrderNumbers);
   for (const cloudOrder of cloudOrders) {
     if (!localOrderMap.has(cloudOrder.orderNumber) && !deletedSet.has(cloudOrder.orderNumber)) {
@@ -97,37 +91,24 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
   console.log('[Sync] To download:', ordersToDownload.length);
   console.log('[Sync] To delete from cloud:', cloudIdsToDelete.length);
 
-  // Execute uploads (don't modify local storage - it's already correct)
-  for (const order of ordersToUpload) {
-    try {
-      await apiRepository.save(order);
-    } catch (err) {
-      console.warn('[Sync] Failed to upload order:', order.orderNumber, err);
-    }
+  // Execute batch operations
+  if (ordersToUpload.length > 0) {
+    await apiRepository.saveAll(ordersToUpload);
   }
 
-  // Execute downloads (save to local)
+  if (cloudIdsToDelete.length > 0) {
+    await apiRepository.deleteAll(cloudIdsToDelete);
+  }
+
+  // Save downloaded orders locally
   for (const order of ordersToDownload) {
-    try {
-      await localRepository.save(order);
-    } catch (err) {
-      console.warn('[Sync] Failed to save downloaded order:', order.orderNumber, err);
-    }
-  }
-
-  // Execute cloud deletions
-  for (const id of cloudIdsToDelete) {
-    try {
-      await apiRepository.delete(id);
-    } catch (err) {
-      console.warn('[Sync] Failed to delete from cloud:', id, err);
-    }
+    await localRepository.save(order);
   }
 
   // Clear deletion tracking
   await localRepository.clearDeletedOrderNumbers();
 
-  // Clean up soft-deleted local orders (they've been synced to cloud deletion)
+  // Clean up soft-deleted local orders
   for (const localOrder of allLocalOrders) {
     if (localOrder.deletedAt && localOrder.userId === userId) {
       await localRepository.delete(localOrder.id);
@@ -144,14 +125,7 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
 
 /**
  * Hook that handles syncing local orders with the cloud when authenticated.
- *
- * Conflict Resolution Strategy:
- * - Orders are matched by orderNumber (unique per Amazon order)
- * - When both local and cloud have the same order:
- *   - Compare updatedAt timestamps
- *   - Most recently updated version wins
- *   - If no updatedAt, cloud version wins (safer default)
- * - New orders (exist only in one place) are synced to the other
+ * Sync happens on login and can be triggered manually.
  */
 export function useOrderSync() {
   const { isAuthenticated, user } = useAuth();

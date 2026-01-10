@@ -61,7 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Update API repository token when user changes
   useEffect(() => {
     if (apiRepository) {
-      apiRepository.setAccessToken(user?.access_token ?? null, 'Bearer');
+      apiRepository.setAccessToken(user?.access_token ?? null);
     }
   }, [user]);
 
