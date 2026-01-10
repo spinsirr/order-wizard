@@ -65,4 +65,37 @@ export class ApiRepository {
       )
     );
   }
+
+  // Single-item operations for sync queue
+  async save(order: Order): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/orders`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify(order),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to save order: ${response.statusText}`);
+    }
+  }
+
+  async update(id: string, data: Partial<Order>): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/orders/${id}`, {
+      method: 'PATCH',
+      headers: this.headers,
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to update order: ${response.statusText}`);
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/orders/${id}`, {
+      method: 'DELETE',
+      headers: this.headers,
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete order: ${response.statusText}`);
+    }
+  }
 }

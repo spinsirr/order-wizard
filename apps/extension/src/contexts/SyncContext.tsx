@@ -1,27 +1,27 @@
-import { createContext, useContext, useCallback, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository, apiRepository } from '@/config';
+import { syncQueue } from '@/lib/syncQueue';
 import { ORDERS_KEY } from '@/constants';
 import type { Order } from '@/types';
 
-const SYNC_DEBOUNCE_MS = 500;
-
 interface SyncContextValue {
-  sync: () => void;
   isSyncing: boolean;
   lastSyncedAt: Date | null;
+  pendingCount: number;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
 
-// Flag to prevent sync loop when we're writing downloaded data
-let isWritingFromSync = false;
-
-async function performSync(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
+/**
+ * Pull cloud orders on login (one-time download)
+ * Local changes are synced via the queue in useOrders mutations
+ */
+async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
   if (!apiRepository) return;
 
-  console.log('[Sync] Starting sync for user:', userId);
+  console.log('[Sync] Pulling cloud orders for user:', userId);
 
   localRepository.setCurrentUserId(null);
   const [allLocalOrders, cloudOrders, deletedOrderNumbers] = await Promise.all([
@@ -32,78 +32,71 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
 
   console.log('[Sync] Local:', allLocalOrders.length, 'Cloud:', cloudOrders.length);
 
-  const cloudOrderMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
   const localOrderMap = new Map(allLocalOrders.map((o) => [o.orderNumber, o]));
-
-  const ordersToUpload: Order[] = [];
-  const ordersToDownload: Order[] = [];
-  const cloudIdsToDelete: string[] = [];
-
-  for (const localOrder of allLocalOrders) {
-    if (localOrder.deletedAt) continue;
-
-    const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
-
-    if (localOrder.userId === 'local') {
-      if (!cloudOrder) ordersToUpload.push({ ...localOrder, userId });
-    } else if (localOrder.userId === userId) {
-      if (!cloudOrder) {
-        ordersToUpload.push(localOrder);
-      } else {
-        const localTime = localOrder.updatedAt ? new Date(localOrder.updatedAt).getTime() : 0;
-        const cloudTime = cloudOrder.updatedAt ? new Date(cloudOrder.updatedAt).getTime() : 0;
-        if (localTime > cloudTime) ordersToUpload.push(localOrder);
-      }
-    }
-  }
-
   const deletedSet = new Set(deletedOrderNumbers);
+
+  // Download orders that exist in cloud but not locally (and not deleted)
+  const ordersToDownload: Order[] = [];
   for (const cloudOrder of cloudOrders) {
     if (!localOrderMap.has(cloudOrder.orderNumber) && !deletedSet.has(cloudOrder.orderNumber)) {
       ordersToDownload.push(cloudOrder);
     }
   }
 
-  for (const orderNumber of deletedOrderNumbers) {
-    const cloudOrder = cloudOrderMap.get(orderNumber);
-    if (cloudOrder) cloudIdsToDelete.push(cloudOrder.id);
-  }
+  console.log('[Sync] Downloading:', ordersToDownload.length, 'orders from cloud');
 
-  for (const localOrder of allLocalOrders) {
-    if (localOrder.deletedAt && localOrder.userId === userId) {
-      const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
-      if (cloudOrder) cloudIdsToDelete.push(cloudOrder.id);
-    }
-  }
-
-  console.log('[Sync] Upload:', ordersToUpload.length, 'Download:', ordersToDownload.length, 'Delete:', cloudIdsToDelete.length);
-
-  // Upload and delete on cloud
-  if (ordersToUpload.length > 0) await apiRepository.saveAll(ordersToUpload);
-  if (cloudIdsToDelete.length > 0) await apiRepository.deleteAll(cloudIdsToDelete);
-
-  // Download to local - set flag to prevent sync loop
   if (ordersToDownload.length > 0) {
-    isWritingFromSync = true;
     for (const order of ordersToDownload) {
       await localRepository.save(order);
     }
-    isWritingFromSync = false;
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
   }
 
-  // Cleanup
-  await localRepository.clearDeletedOrderNumbers();
-
+  // Upload any local orders that don't exist in cloud yet
+  const cloudOrderMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
   for (const localOrder of allLocalOrders) {
-    if (localOrder.deletedAt && localOrder.userId === userId) {
-      isWritingFromSync = true;
-      await localRepository.delete(localOrder.id);
-      isWritingFromSync = false;
+    if (localOrder.deletedAt) continue;
+
+    const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
+    if (!cloudOrder) {
+      // Queue for upload
+      const orderToUpload = localOrder.userId === 'local'
+        ? { ...localOrder, userId }
+        : localOrder;
+      syncQueue.add({ type: 'create', order: orderToUpload });
     }
   }
 
-  console.log('[Sync] Completed');
+  // Queue deletions for soft-deleted orders
+  for (const localOrder of allLocalOrders) {
+    if (localOrder.deletedAt && localOrder.userId === userId) {
+      const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
+      if (cloudOrder) {
+        syncQueue.add({ type: 'delete', orderId: cloudOrder.id });
+      }
+    }
+  }
+
+  // Queue deletions for hard-deleted orders (tracked by order number)
+  for (const orderNumber of deletedOrderNumbers) {
+    const cloudOrder = cloudOrderMap.get(orderNumber);
+    if (cloudOrder) {
+      syncQueue.add({ type: 'delete', orderId: cloudOrder.id });
+    }
+  }
+
+  // Process the queue
+  await syncQueue.process();
+
+  // Cleanup soft-deleted and tracked deletions
+  await localRepository.clearDeletedOrderNumbers();
+  for (const localOrder of allLocalOrders) {
+    if (localOrder.deletedAt && localOrder.userId === userId) {
+      await localRepository.delete(localOrder.id);
+    }
+  }
+
+  console.log('[Sync] Pull completed');
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -111,31 +104,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const userId = user?.sub;
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const syncMutation = useMutation({
     mutationFn: () => {
       if (!userId) throw new Error('User ID not available');
-      return performSync(userId, queryClient);
+      return pullCloudOrders(userId, queryClient);
     },
     onSuccess: () => {
       setLastSyncedAt(new Date());
     },
   });
 
-  const sync = useCallback(() => {
-    if (!isAuthenticated || !apiRepository || !userId || syncMutation.isPending) return;
-
-    // Debounce to prevent rapid successive syncs
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      syncMutation.mutate();
-    }, SYNC_DEBOUNCE_MS);
-  }, [isAuthenticated, userId, syncMutation]);
-
-  // Auto-sync on login
+  // Pull cloud orders on login (one-time)
   const hasSyncedRef = useRef(false);
   useEffect(() => {
     if (isAuthenticated && apiRepository && userId && !hasSyncedRef.current) {
@@ -148,53 +129,34 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, userId, syncMutation]);
 
-  // Listen for storage changes - auto sync
+  // Track pending sync queue count
   useEffect(() => {
-    if (!isAuthenticated || !apiRepository || !userId) return;
-
-    const handleStorageChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      if (areaName !== 'local') return;
-      if (isWritingFromSync) return; // Prevent loop
-
-      // Check if orders changed
-      const hasOrderChanges = Object.keys(changes).some((key) => key.startsWith('orders_'));
-      if (hasOrderChanges) {
-        console.log('[Sync] Storage changed, triggering sync');
-        sync();
-      }
+    const updateCount = async () => {
+      const count = await syncQueue.getPendingCount();
+      setPendingCount(count);
     };
 
-    chrome.storage.onChanged.addListener(handleStorageChange);
-    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
-  }, [isAuthenticated, userId, sync]);
+    updateCount();
+    const unsubscribe = syncQueue.subscribe(updateCount);
+    return unsubscribe;
+  }, []);
 
-  // Listen for ORDER_SAVED from content script
+  // Listen for ORDER_SAVED from content script to queue new orders
   useEffect(() => {
     if (!isAuthenticated || !apiRepository || !userId) return;
 
-    const handleMessage = (message: { type?: string }) => {
-      if (message.type === 'ORDER_SAVED') {
-        sync();
+    const handleMessage = (message: { type?: string; order?: Order }) => {
+      if (message.type === 'ORDER_SAVED' && message.order) {
+        // Queue the new order for sync
+        syncQueue.add({ type: 'create', order: { ...message.order, userId } });
       }
     };
     chrome.runtime.onMessage.addListener(handleMessage);
     return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, [isAuthenticated, userId, sync]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
+  }, [isAuthenticated, userId]);
 
   return (
-    <SyncContext.Provider value={{ sync, isSyncing: syncMutation.isPending, lastSyncedAt }}>
+    <SyncContext.Provider value={{ isSyncing: syncMutation.isPending, lastSyncedAt, pendingCount }}>
       {children}
     </SyncContext.Provider>
   );
@@ -203,7 +165,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 export function useSync(): SyncContextValue {
   const context = useContext(SyncContext);
   if (!context) {
-    return { sync: () => {}, isSyncing: false, lastSyncedAt: null };
+    return { isSyncing: false, lastSyncedAt: null, pendingCount: 0 };
   }
   return context;
 }

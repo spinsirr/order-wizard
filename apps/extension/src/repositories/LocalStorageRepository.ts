@@ -36,6 +36,13 @@ export class LocalStorageRepository {
     await chrome.storage.local.remove(this.DELETED_ORDERS_KEY);
   }
 
+  async removeDeletedOrderNumber(orderNumber: string): Promise<void> {
+    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
+    const deleted = (result[this.DELETED_ORDERS_KEY] as string[]) || [];
+    const filtered = deleted.filter((n) => n !== orderNumber);
+    await chrome.storage.local.set({ [this.DELETED_ORDERS_KEY]: filtered });
+  }
+
   async save(order: Order): Promise<void> {
     const orders = await this.getAllOrders();
     const existingIndex = orders.findIndex((o) => o.id === order.id);

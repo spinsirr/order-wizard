@@ -3,11 +3,11 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface UserBarProps {
   isSyncing?: boolean;
-  onSync?: () => void;
   lastSyncedAt?: Date | null;
+  pendingCount?: number;
 }
 
-export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProps) {
+export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0 }: UserBarProps) {
   const { isLoading, isAuthenticated, user, error, signIn, signOut } = useAuth();
 
   const displayEmail = user?.email ?? '';
@@ -79,36 +79,23 @@ export function UserBar({ isSyncing = false, onSync, lastSyncedAt }: UserBarProp
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {onSync && (
-                <button
-                  type="button"
-                  className="rounded-lg border border-border/60 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-                  onClick={onSync}
-                  disabled={isSyncing}
-                  title={lastSyncedAt ? `Last synced: ${lastSyncedAt.toLocaleTimeString()}` : 'Sync now'}
+              {(isSyncing || pendingCount > 0) && (
+                <div
+                  className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm text-muted-foreground"
+                  title={lastSyncedAt ? `Last synced: ${lastSyncedAt.toLocaleTimeString()}` : 'Syncing...'}
                 >
                   {isSyncing ? (
-                    <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
-                  ) : (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                      <path d="M3 3v5h5" />
-                      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                      <path d="M16 21h5v-5" />
-                    </svg>
-                  )}
-                </button>
+                    <>
+                      <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
+                      <span>Syncing...</span>
+                    </>
+                  ) : pendingCount > 0 ? (
+                    <>
+                      <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
+                      <span>{pendingCount} pending</span>
+                    </>
+                  ) : null}
+                </div>
               )}
               <button
                 type="button"

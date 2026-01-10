@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { scrapeOrderData } from './scraper';
 import type { Order } from '@/types';
 import { OrderStatus } from '@/types';
-import { orderRepository } from '@/config';
+import { localRepository } from '@/config';
 
 export interface SaveOrderResult {
   success: boolean;
@@ -12,12 +12,15 @@ export interface SaveOrderResult {
 }
 
 export async function saveOrder(orderCard: Element, userId: string): Promise<SaveOrderResult> {
-  if ('setCurrentUserId' in orderRepository) {
-    (orderRepository as { setCurrentUserId: (id: string) => void }).setCurrentUserId(userId);
-  }
+  localRepository.setCurrentUserId(userId);
 
   const scrapedData = scrapeOrderData(orderCard);
-  const allOrders = await orderRepository.getAll();
+
+  // Read orders and deleted order numbers in parallel
+  const [allOrders, deletedOrderNumbers] = await Promise.all([
+    localRepository.getAll(),
+    localRepository.getDeletedOrderNumbers(),
+  ]);
 
   // Check if order already exists (non-deleted)
   const existingOrder = allOrders.find(
@@ -26,6 +29,13 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
 
   if (existingOrder) {
     return { success: false, isDuplicate: true };
+  }
+
+  // Check if order was previously deleted (skip if re-saving)
+  const wasDeleted = deletedOrderNumbers.includes(scrapedData.orderNumber);
+  if (wasDeleted) {
+    // Clear from deleted list so it can be saved
+    await localRepository.removeDeletedOrderNumber(scrapedData.orderNumber);
   }
 
   // Check if there's a soft-deleted order with the same orderNumber
@@ -56,7 +66,7 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
     };
   }
 
-  await orderRepository.save(order);
+  await localRepository.save(order);
 
   // Notify popup if open (ignore errors if popup is closed)
   chrome.runtime.sendMessage({

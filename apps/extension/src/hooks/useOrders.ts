@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository } from '@/config';
+import { syncQueue } from '@/lib/syncQueue';
 import { ORDERS_KEY, LOCAL_USER_ID } from '@/constants';
 import type { Order, OrderStatus } from '@/types';
 
@@ -47,13 +48,22 @@ export function useOrders() {
  */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const queryKey = useOrdersQueryKey();
   const userId = useCurrentUserId();
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
+      const updatedAt = new Date().toISOString();
+
+      // Update locally first (offline-first)
       localRepository.setCurrentUserId(userId);
-      await localRepository.update(id, { status, updatedAt: new Date().toISOString() });
+      await localRepository.update(id, { status, updatedAt });
+
+      // Queue for cloud sync (non-blocking)
+      if (isAuthenticated) {
+        syncQueue.add({ type: 'update', orderId: id, data: { status, updatedAt } });
+      }
     },
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey });
@@ -68,7 +78,6 @@ export function useUpdateOrderStatus() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
-      // Sync triggered automatically via chrome.storage.onChanged
     },
   });
 }
@@ -85,12 +94,16 @@ export function useDeleteOrders() {
   return useMutation({
     mutationFn: async (ids: string[]) => {
       localRepository.setCurrentUserId(userId);
+      const deletedAt = new Date().toISOString();
 
       if (isAuthenticated) {
+        // Soft delete locally, queue for cloud sync
         for (const id of ids) {
-          await localRepository.update(id, { deletedAt: new Date().toISOString() });
+          await localRepository.update(id, { deletedAt });
+          syncQueue.add({ type: 'delete', orderId: id });
         }
       } else {
+        // Not authenticated - track for later sync, delete locally
         localRepository.setCurrentUserId(null);
         const orders = await localRepository.getAll();
         const ordersToDelete = orders.filter((o) => ids.includes(o.id));
@@ -114,7 +127,6 @@ export function useDeleteOrders() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
-      // Sync triggered automatically via chrome.storage.onChanged
     },
   });
 }
