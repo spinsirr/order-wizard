@@ -2,19 +2,9 @@
 default:
     @just --list
 
-# CI checks (used by pre-commit hook)
-ci: typecheck lint check-server
+alias ci := check
 
-# Start MongoDB
-db:
-    docker-compose up -d mongodb
-
-# Stop MongoDB
-db-stop:
-    docker-compose down
-
-# Run all dev servers in parallel (starts MongoDB first)
-# Note: Use Ctrl+C twice or run `just stop` to kill all processes
+# Run all dev servers (MongoDB + extension + server)
 dev: db
     #!/usr/bin/env bash
     trap 'kill 0' EXIT SIGINT SIGTERM
@@ -29,48 +19,42 @@ stop:
     -lsof -ti:3000 | xargs -r kill -9
     -lsof -ti:5173 | xargs -r kill -9
 
-# Extension commands
-dev-extension:
-    cd apps/extension && bun run dev
-
-build-extension:
+# Build everything
+build:
     cd apps/extension && bun run build
+    cd apps/server && cargo build --release
 
-lint-extension:
-    cd apps/extension && bun run lint
-
-lint:
-    cd apps/extension && bun run lint
-
-lint-fix:
-    cd apps/extension && bun run lint:fix
-
-format:
-    cd apps/extension && bun run format
-
-typecheck-extension:
+# Run all checks (typecheck + lint + clippy)
+check:
     cd apps/extension && bun run typecheck
+    cd apps/extension && bun run lint
+    cd apps/server && cargo clippy
 
+# TypeScript type check
 typecheck:
     cd apps/extension && bun run typecheck
 
-# Server commands
-dev-server:
-    cd apps/server && cargo watch -x run
+# Lint extension code
+lint:
+    cd apps/extension && bun run lint
 
-build-server:
-    cd apps/server && cargo build --release
+# Lint and auto-fix
+lint-fix:
+    cd apps/extension && bun run lint:fix
 
-check-server:
-    cd apps/server && cargo clippy
+# Format code
+format:
+    cd apps/extension && bun run format
 
-# Run all builds
-build: build-extension build-server
+# Start MongoDB
+db:
+    docker-compose up -d mongodb
 
-# Run all checks
-check: typecheck-extension check-server lint-extension
+# Stop MongoDB
+db-stop:
+    docker-compose down
 
-# Clean all
+# Clean all build artifacts
 clean:
     cd apps/extension && bun run clean
     cd apps/server && cargo clean
