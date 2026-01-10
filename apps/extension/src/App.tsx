@@ -1,7 +1,7 @@
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { UserBar } from './components/UserBar';
 import { OrderTable } from './components/OrderTable';
-import { useOrderSync } from './hooks/useOrders';
+import { useOrderSync } from './hooks/useOrderSync';
 import { useEffect } from 'react';
 import { initializeErrorHandlers } from '@/lib';
 
