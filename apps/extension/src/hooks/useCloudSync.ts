@@ -104,7 +104,7 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
 /**
  * Sync local orders with cloud (on login + manual trigger)
  */
-export function useOrderSync() {
+export function useCloudSync() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.sub;

@@ -1,13 +1,13 @@
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { UserBar } from './components/UserBar';
 import { OrderTable } from './components/OrderTable';
-import { useOrderSync } from './hooks/useOrderSync';
+import { useCloudSync } from './hooks/useCloudSync';
 import { useEffect } from 'react';
 import { initializeErrorHandlers } from '@/lib';
 
 function AppContent() {
   // Sync local orders to cloud when user logs in
-  const { isSyncing, sync, lastSyncedAt } = useOrderSync();
+  const { isSyncing, sync, lastSyncedAt } = useCloudSync();
 
   useEffect(() => {
     initializeErrorHandlers();
