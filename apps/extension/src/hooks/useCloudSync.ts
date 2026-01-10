@@ -94,6 +94,7 @@ async function performSync(userId: string, queryClient: ReturnType<typeof useQue
     }
   }
 
+  // Invalidate all order queries (any userId)
   if (ordersToDownload.length > 0) {
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
   }

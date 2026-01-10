@@ -8,8 +8,14 @@ import type { Order, OrderStatus } from '@/types';
  * Local-First Order Management
  *
  * All reads/writes go to localStorage.
- * Cloud sync is handled separately by useOrderSync.
+ * Cloud sync is handled separately by useCloudSync.
  */
+
+function useOrdersQueryKey(): readonly [string, string] {
+  const { isAuthenticated, user } = useAuth();
+  const userId = isAuthenticated && user ? user.sub : LOCAL_USER_ID;
+  return [...ORDERS_KEY, userId] as const;
+}
 
 function useCurrentUserId(): string {
   const { isAuthenticated, user } = useAuth();
@@ -20,16 +26,19 @@ function useCurrentUserId(): string {
  * Read orders from localStorage
  */
 export function useOrders() {
-  const { isAuthenticated, user } = useAuth();
+  const { isLoading } = useAuth();
+  const queryKey = useOrdersQueryKey();
+  const userId = useCurrentUserId();
 
   return useQuery({
-    queryKey: ORDERS_KEY,
+    queryKey,
     queryFn: async () => {
-      localRepository.setCurrentUserId(isAuthenticated && user ? user.sub : LOCAL_USER_ID);
+      localRepository.setCurrentUserId(userId);
       const orders = await localRepository.getAll();
       return orders.filter((order) => !order.deletedAt);
     },
     staleTime: 1000 * 60,
+    enabled: !isLoading,
   });
 }
 
@@ -38,6 +47,7 @@ export function useOrders() {
  */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
+  const queryKey = useOrdersQueryKey();
   const userId = useCurrentUserId();
 
   return useMutation({
@@ -46,18 +56,18 @@ export function useUpdateOrderStatus() {
       await localRepository.update(id, { status, updatedAt: new Date().toISOString() });
     },
     onMutate: async ({ id, status }) => {
-      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
+      await queryClient.cancelQueries({ queryKey });
+      const previousOrders = queryClient.getQueryData<Order[]>(queryKey);
+      queryClient.setQueryData<Order[]>(queryKey, (old) =>
         old?.map((order) => (order.id === id ? { ...order, status } : order))
       );
       return { previousOrders };
     },
     onError: (_err, _variables, context) => {
-      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      if (context?.previousOrders) queryClient.setQueryData(queryKey, context.previousOrders);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -68,6 +78,7 @@ export function useUpdateOrderStatus() {
 export function useDeleteOrders() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
+  const queryKey = useOrdersQueryKey();
   const userId = useCurrentUserId();
 
   return useMutation({
@@ -90,18 +101,18 @@ export function useDeleteOrders() {
       }
     },
     onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
+      await queryClient.cancelQueries({ queryKey });
+      const previousOrders = queryClient.getQueryData<Order[]>(queryKey);
+      queryClient.setQueryData<Order[]>(queryKey, (old) =>
         old?.filter((order) => !ids.includes(order.id))
       );
       return { previousOrders };
     },
     onError: (_err, _variables, context) => {
-      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      if (context?.previousOrders) queryClient.setQueryData(queryKey, context.previousOrders);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -111,6 +122,7 @@ export function useDeleteOrders() {
  */
 export function useSaveOrder() {
   const queryClient = useQueryClient();
+  const queryKey = useOrdersQueryKey();
   const userId = useCurrentUserId();
 
   return useMutation({
@@ -119,7 +131,7 @@ export function useSaveOrder() {
       await localRepository.save(order);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
