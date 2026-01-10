@@ -17,9 +17,10 @@ services:
       - "${MONGODB_PORT:-27017}:27017"
     volumes:
       - mongo-data:/data/db
+      - ./apps/server/mongo-init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     environment:
-      - MONGO_INITDB_DATABASE=order-wizard
+      - MONGO_INITDB_DATABASE=order_wizard
 
 volumes:
   mongo-data:

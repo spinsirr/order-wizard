@@ -1,10 +1,11 @@
 services:
   mongo:
-    image: mongo:7
+    image: mongo:8
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
     environment:
       MONGO_INITDB_DATABASE: order_wizard
 

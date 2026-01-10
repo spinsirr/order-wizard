@@ -1,6 +1,6 @@
 import { initializeErrorHandlers } from '@/lib';
 import { getCurrentUser } from './userResolver';
-import { saveOrder, replaceCacheFromMessage } from './orderProcessor';
+import { saveOrder } from './orderProcessor';
 import {
   injectSaveButtons,
   setupMutationObserver,
@@ -11,10 +11,6 @@ import {
 } from './injector';
 
 initializeErrorHandlers();
-
-chrome.runtime.onMessage.addListener((message) => {
-  void replaceCacheFromMessage(message);
-});
 
 async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): Promise<void> {
   try {

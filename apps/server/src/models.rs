@@ -10,52 +10,70 @@ pub enum OrderStatus {
     Reimbursed,
 }
 
-impl OrderStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            OrderStatus::Uncommented => "uncommented",
-            OrderStatus::Commented => "commented",
-            OrderStatus::CommentRevealed => "comment_revealed",
-            OrderStatus::Reimbursed => "reimbursed",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Order {
-    /// Unique order identifier
+/// Internal database entity - stored with snake_case field names in MongoDB
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderEntity {
     pub id: String,
-    /// Owner's user ID
     pub user_id: String,
-    /// Amazon order number
-    #[schema(example = "123-4567890-1234567")]
     pub order_number: String,
-    /// Product name
-    #[schema(example = "Wireless Bluetooth Headphones")]
     pub product_name: String,
-    /// Order date as displayed on Amazon
-    #[schema(example = "December 25, 2024")]
     pub order_date: String,
-    /// Product image URL
     pub product_image: String,
-    /// Order total price
-    #[schema(example = "$29.99")]
     pub price: String,
-    /// Current status of the order
     pub status: OrderStatus,
-    /// Optional user note
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-    /// ISO 8601 timestamp for sync conflict resolution
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
-    /// ISO 8601 timestamp when order was created
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
-    /// ISO 8601 timestamp for soft delete
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<String>,
+}
+
+/// API response type - serialized with camelCase for frontend
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Order {
+    pub id: String,
+    pub user_id: String,
+    #[schema(example = "123-4567890-1234567")]
+    pub order_number: String,
+    #[schema(example = "Wireless Bluetooth Headphones")]
+    pub product_name: String,
+    #[schema(example = "December 25, 2024")]
+    pub order_date: String,
+    pub product_image: String,
+    #[schema(example = "$29.99")]
+    pub price: String,
+    pub status: OrderStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<String>,
+}
+
+impl From<OrderEntity> for Order {
+    fn from(e: OrderEntity) -> Self {
+        Self {
+            id: e.id,
+            user_id: e.user_id,
+            order_number: e.order_number,
+            product_name: e.product_name,
+            order_date: e.order_date,
+            product_image: e.product_image,
+            price: e.price,
+            status: e.status,
+            note: e.note,
+            updated_at: e.updated_at,
+            created_at: e.created_at,
+            deleted_at: e.deleted_at,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -76,6 +94,25 @@ pub struct CreateOrderRequest {
     pub created_at: Option<String>,
     #[serde(default)]
     pub deleted_at: Option<String>,
+}
+
+impl CreateOrderRequest {
+    pub fn into_entity(self, user_id: String) -> OrderEntity {
+        OrderEntity {
+            id: self.id,
+            user_id,
+            order_number: self.order_number,
+            product_name: self.product_name,
+            order_date: self.order_date,
+            product_image: self.product_image,
+            price: self.price,
+            status: self.status,
+            note: self.note,
+            updated_at: self.updated_at,
+            created_at: self.created_at,
+            deleted_at: self.deleted_at,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

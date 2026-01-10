@@ -6,7 +6,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::auth::{AuthError, AuthUser};
 use crate::db::orders_collection;
 use crate::errors::{AppError, AppResult};
-use crate::models::{CreateOrderRequest, Order, UpdateOrderRequest};
+use crate::models::{CreateOrderRequest, Order, OrderStatus, UpdateOrderRequest};
 
 pub fn router() -> OpenApiRouter {
     OpenApiRouter::new()
@@ -32,13 +32,15 @@ pub fn router() -> OpenApiRouter {
 async fn list_orders(AuthUser(claims): AuthUser) -> AppResult<Json<Vec<Order>>> {
     tracing::info!("GET /orders - user: {}", claims.sub);
 
-    let orders: Vec<Order> = orders_collection()
+    let entities: Vec<_> = orders_collection()
         .find(doc! { "user_id": &claims.sub })
         .await
         .map_err(AppError::database)?
         .try_collect()
         .await
         .map_err(AppError::database)?;
+
+    let orders: Vec<Order> = entities.into_iter().map(Order::from).collect();
 
     tracing::info!("GET /orders - returning {} orders", orders.len());
     Ok(Json(orders))
@@ -67,31 +69,18 @@ async fn create_order(
         payload.order_number
     );
 
-    let order = Order {
-        id: payload.id,
-        user_id: claims.sub,
-        order_number: payload.order_number,
-        product_name: payload.product_name,
-        order_date: payload.order_date,
-        product_image: payload.product_image,
-        price: payload.price,
-        status: payload.status,
-        note: payload.note,
-        updated_at: payload.updated_at,
-        created_at: payload.created_at,
-        deleted_at: payload.deleted_at,
-    };
+    let entity = payload.into_entity(claims.sub);
 
     // Upsert: update if exists, insert if not
-    let filter = doc! { "order_number": &order.order_number, "user_id": &order.user_id };
+    let filter = doc! { "order_number": &entity.order_number, "user_id": &entity.user_id };
     orders_collection()
-        .replace_one(filter, &order)
+        .replace_one(filter, &entity)
         .upsert(true)
         .await
         .map_err(AppError::database)?;
 
-    tracing::info!("POST /orders - upserted order: {}", order.id);
-    Ok((StatusCode::CREATED, Json(order)))
+    tracing::info!("POST /orders - upserted order: {}", entity.id);
+    Ok((StatusCode::CREATED, Json(Order::from(entity))))
 }
 
 #[utoipa::path(
@@ -113,13 +102,13 @@ async fn create_order(
 async fn get_order(AuthUser(claims): AuthUser, Path(id): Path<String>) -> AppResult<Json<Order>> {
     tracing::info!("GET /orders/{} - user: {}", id, claims.sub);
 
-    let order = orders_collection()
+    let entity = orders_collection()
         .find_one(doc! { "id": &id, "user_id": &claims.sub })
         .await
         .map_err(AppError::database)?
         .ok_or_else(|| AppError::not_found("Order"))?;
 
-    Ok(Json(order))
+    Ok(Json(Order::from(entity)))
 }
 
 #[utoipa::path(
@@ -150,7 +139,13 @@ async fn update_order(
     let mut update_doc = doc! {};
 
     if let Some(status) = &payload.status {
-        update_doc.insert("status", status.as_str());
+        let status_str = match status {
+            OrderStatus::Uncommented => "uncommented",
+            OrderStatus::Commented => "commented",
+            OrderStatus::CommentRevealed => "comment_revealed",
+            OrderStatus::Reimbursed => "reimbursed",
+        };
+        update_doc.insert("status", status_str);
     }
     if let Some(note) = &payload.note {
         update_doc.insert("note", note);
