@@ -1,27 +1,17 @@
-import Fuse from 'fuse.js';
+import { matchSorter } from 'match-sorter';
 import type { Order, OrderStatus } from '@/types';
 
 export type StatusFilter = OrderStatus | 'all';
 export type OrderSortOption = 'created-desc' | 'created-asc' | 'date-desc' | 'date-asc';
 
-const fuseOptions = {
-  keys: [
-    { name: 'orderNumber', weight: 2 },
-    { name: 'productName', weight: 1.5 },
-    { name: 'price', weight: 1 },
-    { name: 'note', weight: 1 },
-  ],
-  threshold: 0.4,
-  ignoreLocation: true,
-  useExtendedSearch: false,
-};
-
 export function searchOrders(orders: Order[], query: string): Order[] {
   if (!query.trim()) {
     return orders;
   }
-  const fuse = new Fuse(orders, fuseOptions);
-  return fuse.search(query).map((result) => result.item);
+
+  return matchSorter(orders, query, {
+    keys: ['orderNumber', 'productName', 'price', 'note'],
+  });
 }
 
 function getCreatedTime(order: Order): number {

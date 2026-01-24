@@ -20,6 +20,8 @@ interface QueueItem {
 class SyncQueue {
   private processing = false;
   private listeners: Set<() => void> = new Set();
+  private cachedCount = 0;
+  private hydrated = false;
 
   async getQueue(): Promise<QueueItem[]> {
     const result = await chrome.storage.local.get(SYNC_QUEUE_KEY);
@@ -28,6 +30,7 @@ class SyncQueue {
 
   private async saveQueue(queue: QueueItem[]): Promise<void> {
     await chrome.storage.local.set({ [SYNC_QUEUE_KEY]: queue });
+    this.cachedCount = queue.length;
   }
 
   async add(operation: SyncOperation): Promise<void> {
@@ -129,6 +132,21 @@ class SyncQueue {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  async hydrate(): Promise<void> {
+    if (this.hydrated) return;
+    const queue = await this.getQueue();
+    this.cachedCount = queue.length;
+    this.hydrated = true;
+  }
+
+  getSnapshot(): number {
+    return this.cachedCount;
+  }
+
+  getServerSnapshot(): number {
+    return 0;
   }
 
   private notifyListeners(): void {

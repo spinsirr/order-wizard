@@ -62,7 +62,7 @@ export function OrderTableFilters({
         />
         <input
           type="text"
-          placeholder="Search by order #, product name, or price..."
+          placeholder="Search orders..."
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           className="w-full rounded-2xl border border-transparent bg-card py-2.5 pl-11 pr-4 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.08)] transition focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"

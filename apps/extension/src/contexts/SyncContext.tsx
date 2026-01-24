@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository, apiRepository } from '@/config';
 import { syncQueue } from '@/lib/syncQueue';
+import { useSyncQueueCount } from '@/hooks/useSyncQueueCount';
 import { ORDERS_KEY } from '@/constants';
 import type { Order } from '@/types';
 
@@ -104,7 +105,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const userId = user?.sub;
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
+  const pendingCount = useSyncQueueCount();
 
   const syncMutation = useMutation({
     mutationFn: () => {
@@ -128,18 +129,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSyncedAt(null);
     }
   }, [isAuthenticated, userId, syncMutation]);
-
-  // Track pending sync queue count
-  useEffect(() => {
-    const updateCount = async () => {
-      const count = await syncQueue.getPendingCount();
-      setPendingCount(count);
-    };
-
-    updateCount();
-    const unsubscribe = syncQueue.subscribe(updateCount);
-    return unsubscribe;
-  }, []);
 
   // Listen for ORDER_SAVED from content script to queue new orders
   useEffect(() => {

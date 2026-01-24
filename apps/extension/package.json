@@ -1,7 +1,7 @@
 {
   "name": "@order-wizard/extension",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,8 +17,8 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.16",
     "clsx": "^2.1.1",
-    "fuse.js": "^7.1.0",
     "lucide-react": "^0.545.0",
+    "match-sorter": "^8.2.0",
     "oauth4webapi": "^3.8.3",
     "papaparse": "^5.5.3",
     "react": "^19.1.1",

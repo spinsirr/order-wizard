@@ -8,7 +8,7 @@ interface UserBarProps {
 }
 
 export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0 }: UserBarProps) {
-  const { isLoading, isAuthenticated, user, error, signIn, signOut } = useAuth();
+  const { isLoading, isAuthenticated, user, signIn, signOut } = useAuth();
 
   const displayEmail = user?.email ?? '';
 
@@ -41,25 +41,6 @@ export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0 }: U
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
         <div className="flex w-full items-center justify-between px-6 py-5">
           <span className="text-sm text-muted-foreground md:text-base">Loading...</span>
-        </div>
-      </header>
-    );
-  }
-
-  if (error) {
-    return (
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md">
-        <div className="flex w-full items-center justify-between px-6 py-5">
-          <span className="text-sm text-destructive md:text-base">
-            Encountering error... {error.message}
-          </span>
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-            onClick={handleSignIn}
-          >
-            Retry sign in
-          </button>
         </div>
       </header>
     );

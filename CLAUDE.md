@@ -20,6 +20,7 @@ just build        # Build extension + server
 
 # Code Quality
 just check        # Run all checks (typecheck + lint + clippy)
+just ci           # Alias for check
 just typecheck    # TypeScript check
 just lint         # Biome lint
 just lint-fix     # Biome lint with auto-fix
@@ -31,6 +32,7 @@ just db-stop      # Stop MongoDB
 
 # Other
 just install      # Install dependencies
+just setup        # Setup git hooks
 just clean        # Clean all build artifacts
 ```
 
@@ -50,25 +52,51 @@ just clean        # Clean all build artifacts
 ### Extension Structure (apps/extension/src/)
 ```
 src/
-├── lib/           # Utilities (cn.ts, errors.ts)
-├── config/        # OAuth config, repository instances
-├── repositories/  # ApiRepository, LocalStorageRepository
-├── hooks/         # useOrders (CRUD), useCloudSync (sync)
-├── contexts/      # AuthContext
-├── components/    # React components
-├── constants/     # Shared constants
-├── types/         # TypeScript types
-└── content/       # Content scripts for Amazon pages
+├── App.tsx              # Main app with ErrorBoundary
+├── main.tsx             # Entry point
+├── lib/                 # Utilities (cn.ts, errors.ts, syncQueue.ts)
+├── utils/               # Order filtering (orderFilters.ts), export (orderExport.ts)
+├── config/              # OAuth config, repository instances, env
+├── repositories/        # ApiRepository, LocalStorageRepository
+├── hooks/               # useOrders (CRUD + save)
+├── contexts/            # AuthContext, SyncContext
+├── components/          # React components
+│   └── ui/              # Reusable UI primitives (button, card, badge)
+├── constants/           # Shared constants (ORDERS_KEY, LOCAL_USER_ID)
+├── types/               # TypeScript types (Order, User, AuthUser, OrderStatus)
+├── schemas/             # Zod validation schemas
+├── content/             # Content scripts for Amazon pages
+│   ├── content.ts       # Main entry
+│   ├── injector.ts      # Inject save buttons
+│   ├── scraper.ts       # Scrape order data
+│   ├── orderProcessor.ts
+│   └── userResolver.ts
+└── background/          # Background script
 ```
 
-### Data Sync (apps/extension/src/hooks/useCloudSync.ts)
+### Server Structure (apps/server/src/)
+```
+src/
+├── main.rs              # Server setup, routes, CORS, Swagger UI
+├── models.rs            # OrderStatus, Order, request/response types
+├── errors.rs            # AppError enum, AppResult type
+├── db.rs                # MongoDB connection
+├── auth/
+│   └── mod.rs           # JWT validation, JWKS caching, AuthUser extractor
+└── routes/
+    ├── mod.rs           # Route exports
+    └── orders.rs        # Order CRUD handlers
+```
+
+### Data Sync
 - Offline-first: orders stored locally, synced to cloud when authenticated
 - Conflict resolution: `updatedAt` timestamp comparison (last write wins)
 - Soft delete: local orders marked with `deletedAt` for sync tracking
+- Sync queue with exponential backoff retry (max 3 retries)
 
 ### Order Status Flow
 ```
-Uncommented → Commented → CommentRevealed → Reimbursed
+Uncommented -> Commented -> CommentRevealed -> Reimbursed
 ```
 
 ## Design Philosophy
@@ -128,9 +156,7 @@ function OrderTable() { /* everything here */ }
 export function useOrders() { ... }
 export function useUpdateOrderStatus() { ... }
 export function useDeleteOrders() { ... }
-
-// useCloudSync.ts - Cloud sync logic
-export function useCloudSync() { ... }
+export function useSaveOrder() { ... }
 ```
 
 **State** - Prefer local over global:
@@ -213,22 +239,46 @@ match collection.find(filter).await {
 |------|---------|
 | config/index.ts | Repository instances, environment config |
 | config/oauth.ts | OAuth configuration for Cognito |
-| repositories/ApiRepository.ts | HTTP client for cloud sync (batch operations) |
+| config/env.ts | Environment variable imports |
+| repositories/ApiRepository.ts | HTTP client for cloud sync |
 | repositories/LocalStorageRepository.ts | Chrome storage wrapper |
-| hooks/useOrders.ts | Local order CRUD hooks |
-| hooks/useCloudSync.ts | Bidirectional sync with conflict resolution |
-| contexts/AuthContext.tsx | OAuth state, token management |
-| content/content.ts | Injects save buttons on Amazon pages |
+| hooks/useOrders.ts | useOrders, useUpdateOrderStatus, useDeleteOrders, useSaveOrder |
+| contexts/AuthContext.tsx | OAuth state, token management, refresh |
+| contexts/SyncContext.tsx | Sync state (isSyncing, lastSyncedAt, pendingCount) |
+| lib/syncQueue.ts | Sync queue with retry logic (exponential backoff) |
+| lib/cn.ts | clsx + tailwind-merge utility |
+| lib/errors.ts | Global error handler setup |
+| utils/orderFilters.ts | searchOrders, sortOrders, filterOrdersByStatus |
+| utils/orderExport.ts | exportOrdersToCSV (papaparse) |
+| schemas/order.ts | Zod schemas: OrderSchema, ScrapedOrderDataSchema |
+| content/content.ts | Main content script entry |
+| content/scraper.ts | Scrape order data from Amazon pages |
+| content/injector.ts | Inject save buttons on Amazon |
+
+### Extension Components
+| Component | Purpose |
+|-----------|---------|
+| OrderTable.tsx | Main table with filtering, sorting, selection |
+| OrderTableToolbar.tsx | Select all, delete, export controls |
+| OrderTableFilters.tsx | Search, status filter, sort dropdown |
+| OrderCard.tsx | Individual order with status buttons |
+| UserBar.tsx | Auth status, email, sync indicator |
+| DeleteConfirmModal.tsx | Single/bulk delete confirmation |
+| OrderEmptyStates.tsx | Loading, empty, no results states |
+| ErrorBoundary.tsx | React error boundary |
+| ui/button.tsx | Button (filled, tonal, outline, text, icon, destructive) |
+| ui/card.tsx | Card with elevation levels |
+| ui/badge.tsx | Badge (default, success, warning, info, destructive, outline) |
 
 ### Server
 | File | Purpose |
 |------|---------|
-| main.rs | Server setup, routes, CORS |
+| main.rs | Server setup, routes, CORS, Swagger UI |
 | errors.rs | AppError type with IntoResponse impl |
-| auth/mod.rs | JWT validation middleware, JWKS fetching |
+| auth/mod.rs | JWT validation middleware, JWKS caching |
 | routes/orders.rs | Order CRUD handlers |
-| models.rs | Order struct, OrderStatus enum |
-| db.rs | MongoDB connection, index creation |
+| models.rs | Order struct, OrderStatus enum, request/response types |
+| db.rs | MongoDB connection |
 
 ## API Endpoints
 
@@ -238,14 +288,19 @@ match collection.find(filter).await {
 | GET | /me | Yes | Current user info from JWT |
 | GET | /orders | Yes | List user's orders |
 | POST | /orders | Yes | Upsert order (by order_number) |
-| GET | /orders/:id | Yes | Get single order |
-| PATCH | /orders/:id | Yes | Update order |
-| DELETE | /orders/:id | Yes | Delete order |
+| GET | /orders/{id} | Yes | Get single order |
+| PATCH | /orders/{id} | Yes | Update order |
+| DELETE | /orders/{id} | Yes | Delete order |
 | GET | /swagger-ui | No | API documentation |
+| GET | /api-docs/openapi.json | No | OpenAPI schema |
 
 ## Database
 
-### MongoDB Indices
+### MongoDB
+- Database: `order_wizard`
+- Collection: `orders`
+
+### Indices
 Created automatically on startup:
 - `user_id` - for listing user's orders
 - `(user_id, order_number)` - unique, for upsert
@@ -271,6 +326,13 @@ OIDC_CLIENT_ID=<client-id>
 ## Data Model
 
 ```typescript
+enum OrderStatus {
+  Uncommented = 'uncommented',
+  Commented = 'commented',
+  CommentRevealed = 'comment_revealed',
+  Reimbursed = 'reimbursed'
+}
+
 interface Order {
   id: string;           // UUID
   userId: string;       // Cognito sub claim
@@ -279,10 +341,62 @@ interface Order {
   orderDate: string;
   productImage: string;
   price: string;
-  status: OrderStatus;  // uncommented | commented | comment_revealed | reimbursed
+  status: OrderStatus;
   note?: string;
   updatedAt?: string;   // ISO timestamp for sync
   createdAt?: string;
   deletedAt?: string;   // Soft delete timestamp
 }
+
+interface AuthUser {
+  sub: string;
+  email?: string;
+  access_token: string;
+  id_token: string;
+  refresh_token?: string;
+  expires_at: number;
+}
 ```
+
+## Utilities
+
+### Order Filtering (utils/orderFilters.ts)
+```typescript
+type StatusFilter = OrderStatus | 'all'
+type OrderSortOption = 'created-desc' | 'created-asc' | 'date-desc' | 'date-asc'
+
+searchOrders(orders, query)              // match-sorter fuzzy search
+sortOrders(orders, option)               // Sort by created or order date
+filterOrdersByStatus(orders, status)     // Filter by status
+filterAndSortOrders(orders, query, status, sort)  // Combined pipeline
+```
+
+### Sync Queue (lib/syncQueue.ts)
+```typescript
+type SyncOperation = 'create' | 'update' | 'delete'
+
+syncQueue.add(operation)       // Add to queue, deduplicate, process
+syncQueue.process()            // Process with retry (max 3, exponential backoff)
+syncQueue.getPendingCount()    // Get queue length
+syncQueue.subscribe(listener)  // Observer pattern for queue changes
+```
+
+## Dependencies
+
+### Extension (Key)
+- react ^19.1.1
+- @tanstack/react-query ^5.90
+- oauth4webapi ^3.8
+- zod ^4.1
+- papaparse ^5.5
+- lucide-react ^0.545
+- match-sorter ^8.2
+- tailwindcss ^4.1
+- clsx + tailwind-merge
+
+### Server
+- axum 0.8
+- mongodb (async driver)
+- jsonwebtoken + jwks_client
+- tokio (async runtime)
+- utoipa (OpenAPI)
