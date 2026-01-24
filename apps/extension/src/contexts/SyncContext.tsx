@@ -60,11 +60,19 @@ async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof us
 
     const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
     if (!cloudOrder) {
-      // Queue for upload
-      const orderToUpload = localOrder.userId === 'local'
+      // Update local order with current userId and queue for upload
+      const orderWithUserId = localOrder.userId === 'local'
         ? { ...localOrder, userId }
         : localOrder;
-      syncQueue.add({ type: 'create', order: orderToUpload });
+
+      if (localOrder.userId === 'local') {
+        await localRepository.save(orderWithUserId);
+      }
+
+      syncQueue.add({ type: 'create', order: orderWithUserId });
+    } else if (localOrder.userId === 'local') {
+      // Order exists in cloud - just update local userId
+      await localRepository.save({ ...localOrder, userId });
     }
   }
 
