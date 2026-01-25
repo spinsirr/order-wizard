@@ -39,6 +39,14 @@
       "js": [
         "src/content/fbFormFiller/index.ts"
       ]
+    },
+    {
+      "matches": [
+        "*://*.facebook.com/marketplace/item/*"
+      ],
+      "js": [
+        "src/content/fbListingComplete/index.ts"
+      ]
     }
   ],
   "background": {

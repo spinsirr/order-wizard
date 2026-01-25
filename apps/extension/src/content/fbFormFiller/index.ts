@@ -36,23 +36,5 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
   return false;
 });
 
-// Watch for successful listing (URL changes to listing page)
-let lastUrl = location.href;
-const urlObserver = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    // Check if we're on a listing page (not create page)
-    if (location.href.includes('/marketplace/item/')) {
-      chrome.storage.local.get('fb_current_item').then(({ fb_current_item }) => {
-        if (fb_current_item) {
-          chrome.runtime.sendMessage({
-            type: 'FB_LISTING_COMPLETE',
-            itemId: fb_current_item,
-          });
-        }
-      });
-    }
-  }
-});
-
-urlObserver.observe(document.body, { childList: true, subtree: true });
+// Listing completion is detected by fbListingComplete content script
+// which runs when FB navigates to /marketplace/item/*
