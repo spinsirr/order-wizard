@@ -12,6 +12,7 @@
   ],
   "host_permissions": [
     "*://*.amazon.com/*",
+    "*://*.facebook.com/*",
     "https://*.amazoncognito.com/*",
     "https://cognito-idp.us-west-1.amazonaws.com/*"
   ],
@@ -29,6 +30,14 @@
       ],
       "js": [
         "src/content/content.ts"
+      ]
+    },
+    {
+      "matches": [
+        "*://*.facebook.com/marketplace/create/*"
+      ],
+      "js": [
+        "src/content/fbFormFiller/index.ts"
       ]
     }
   ],
