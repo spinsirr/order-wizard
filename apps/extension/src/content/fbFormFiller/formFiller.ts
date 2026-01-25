@@ -1,4 +1,5 @@
-import type { FBListingData } from '@/types';
+import type { FBListingData, FBCondition } from '@/types';
+import { FB_CONDITION_LABELS } from '@/types';
 
 function dispatchInputEvent(element: HTMLInputElement | HTMLTextAreaElement): void {
   element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -70,6 +71,59 @@ async function waitForInputByLabel(labelText: string, timeout = 10000): Promise<
   });
 }
 
+/**
+ * Select condition from FB's dropdown.
+ * FB uses a custom dropdown that requires clicking to open, then selecting an option.
+ */
+async function selectCondition(condition: FBCondition): Promise<void> {
+  const conditionLabel = FB_CONDITION_LABELS[condition];
+
+  // Find the Condition label and its associated dropdown
+  const spans = document.querySelectorAll('span');
+  for (const span of spans) {
+    if (span.textContent?.trim() === 'Condition') {
+      // Find the clickable dropdown element (usually a sibling or nearby element)
+      const container = span.closest('label') || span.parentElement;
+      if (!container) continue;
+
+      // Look for a div that acts as the dropdown trigger
+      const dropdownTrigger = container.querySelector('[role="combobox"], [aria-haspopup="listbox"]') ||
+        container.querySelector('div[tabindex="0"]');
+
+      if (dropdownTrigger) {
+        // Click to open dropdown
+        (dropdownTrigger as HTMLElement).click();
+        await new Promise(r => setTimeout(r, 500));
+
+        // Find and click the option
+        const options = document.querySelectorAll('[role="option"], [role="menuitem"]');
+        for (const option of options) {
+          if (option.textContent?.includes(conditionLabel)) {
+            (option as HTMLElement).click();
+            console.log('[FB FormFiller] Condition selected:', conditionLabel);
+            return;
+          }
+        }
+
+        // Try finding option by span text
+        const allSpans = document.querySelectorAll('span');
+        for (const s of allSpans) {
+          if (s.textContent?.trim() === conditionLabel) {
+            const clickable = s.closest('[role="option"], [role="menuitem"]') || s.parentElement;
+            if (clickable) {
+              (clickable as HTMLElement).click();
+              console.log('[FB FormFiller] Condition selected via span:', conditionLabel);
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  console.warn('[FB FormFiller] Could not find condition dropdown');
+}
+
 async function uploadImages(images: string[]): Promise<void> {
   // Find the file input or drop zone
   const fileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
@@ -138,6 +192,17 @@ export async function fillFBForm(listing: FBListingData): Promise<void> {
   } catch (e) {
     console.warn('[FB FormFiller] Failed to fill description:', e);
   }
+
+  await new Promise(r => setTimeout(r, 300));
+
+  // Select condition
+  try {
+    await selectCondition(listing.condition);
+  } catch (e) {
+    console.warn('[FB FormFiller] Failed to select condition:', e);
+  }
+
+  await new Promise(r => setTimeout(r, 300));
 
   // Upload images
   try {

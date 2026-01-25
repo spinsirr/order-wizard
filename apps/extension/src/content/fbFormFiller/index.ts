@@ -2,57 +2,34 @@ import { initializeErrorHandlers } from '@/lib';
 import { fillFBForm } from './formFiller';
 import type { FBListingData } from '@/types';
 
+const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
+
 initializeErrorHandlers();
 
 console.log('[FB FormFiller] Content script loaded on FB Marketplace');
 
-// Notify background that we're ready
-chrome.runtime.sendMessage({ type: 'FB_FORM_READY' });
+// Read listing from storage and fill the form
+async function init(): Promise<void> {
+  const result = await chrome.storage.local.get(FB_PENDING_LISTING_KEY);
+  const listing = result[FB_PENDING_LISTING_KEY] as FBListingData | undefined;
 
-// Listen for fill commands
-chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
-  if (message.type === 'FB_FILL_FORM') {
-    const listing = message.listing as FBListingData;
-    const itemId = message.itemId as string;
-
-    fillFBForm(listing)
-      .then(() => {
-        console.log('[FB FormFiller] Fill complete, waiting for user to publish');
-        // Update status to waiting
-        chrome.runtime.sendMessage({
-          type: 'FB_LISTING_WAITING',
-          itemId,
-        });
-      })
-      .catch((error) => {
-        console.error('[FB FormFiller] Fill failed:', error);
-        chrome.runtime.sendMessage({
-          type: 'FB_LISTING_FAILED',
-          itemId,
-          error: error.message,
-        });
-      });
+  if (!listing) {
+    console.log('[FB FormFiller] No pending listing found in storage');
+    return;
   }
-  return false;
-});
 
-// Watch for successful listing (URL changes to listing page)
-let lastUrl = location.href;
-const urlObserver = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    // Check if we're on a listing page (not create page)
-    if (location.href.includes('/marketplace/item/')) {
-      chrome.storage.local.get('fb_current_item').then(({ fb_current_item }) => {
-        if (fb_current_item) {
-          chrome.runtime.sendMessage({
-            type: 'FB_LISTING_COMPLETE',
-            itemId: fb_current_item,
-          });
-        }
-      });
-    }
+  console.log('[FB FormFiller] Found pending listing:', listing.title);
+
+  // Clear the pending listing from storage
+  await chrome.storage.local.remove(FB_PENDING_LISTING_KEY);
+
+  // Fill the form
+  try {
+    await fillFBForm(listing);
+    console.log('[FB FormFiller] Form filled successfully');
+  } catch (error) {
+    console.error('[FB FormFiller] Failed to fill form:', error);
   }
-});
+}
 
-urlObserver.observe(document.body, { childList: true, subtree: true });
+init();

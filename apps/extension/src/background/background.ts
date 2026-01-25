@@ -1,4 +1,4 @@
-import { fbQueue, initializeErrorHandlers } from '@/lib';
+import { initializeErrorHandlers } from '@/lib';
 import type { Order } from '@/types';
 
 initializeErrorHandlers();
@@ -38,22 +38,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch((error) => sendResponse({ error: error.message }));
       return true; // Keep channel open for async response
 
-    case 'FB_QUEUE_PROCESS':
-      processNextFBItem();
-      break;
-
-    case 'FB_FORM_READY':
-      // Form filler is ready to receive data
-      handleFBFormReady(sender.tab?.id);
-      break;
-
-    case 'FB_LISTING_COMPLETE':
-      // Listing was published
-      handleFBListingComplete(message.itemId);
-      break;
-
-    case 'FB_LISTING_FAILED':
-      handleFBListingFailed(message.itemId, message.error);
+    case 'OPEN_FB_MARKETPLACE':
+      // Open FB Marketplace create page - form filler will read listing from storage
+      chrome.tabs.create({
+        url: 'https://www.facebook.com/marketplace/create/item',
+        active: true,
+      });
       break;
   }
 
@@ -127,60 +117,3 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-async function processNextFBItem(): Promise<void> {
-  const next = await fbQueue.getNext();
-  if (!next) {
-    console.log('[FBQueue] No items to process');
-    return;
-  }
-
-  console.log('[FBQueue] Processing item:', next.id);
-  await fbQueue.updateStatus(next.id, 'filling');
-
-  // Store current item ID for the form filler
-  await chrome.storage.local.set({ fb_current_item: next.id });
-
-  // Open FB Marketplace create page
-  const tab = await chrome.tabs.create({
-    url: 'https://www.facebook.com/marketplace/create/item',
-    active: true,
-  });
-
-  console.log('[FBQueue] Opened FB tab:', tab.id);
-}
-
-async function handleFBFormReady(tabId?: number): Promise<void> {
-  if (!tabId) return;
-
-  const current = await fbQueue.getCurrentFilling();
-  if (!current) {
-    console.log('[FBQueue] No item currently filling');
-    return;
-  }
-
-  // Send listing data to the form filler
-  chrome.tabs.sendMessage(tabId, {
-    type: 'FB_FILL_FORM',
-    listing: current.listing,
-    itemId: current.id,
-  });
-}
-
-async function handleFBListingComplete(itemId: string): Promise<void> {
-  await fbQueue.updateStatus(itemId, 'done');
-  await chrome.storage.local.remove('fb_current_item');
-
-  // Broadcast update
-  chrome.runtime.sendMessage({ type: 'FB_QUEUE_UPDATED' }).catch(() => {});
-
-  // Process next item after delay
-  setTimeout(() => processNextFBItem(), 2000);
-}
-
-async function handleFBListingFailed(itemId: string, error: string): Promise<void> {
-  await fbQueue.updateStatus(itemId, 'failed', error);
-  await chrome.storage.local.remove('fb_current_item');
-
-  // Broadcast update
-  chrome.runtime.sendMessage({ type: 'FB_QUEUE_UPDATED' }).catch(() => {});
-}
