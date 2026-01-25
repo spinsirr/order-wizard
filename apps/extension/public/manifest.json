@@ -44,5 +44,6 @@
   "background": {
     "service_worker": "src/background/background.ts",
     "type": "module"
-  }
+  },
+  "options_page": "src/options/options.html"
 }
