@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Amazon Order Wizard",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlijZBzr4/IU3CQr/1k54ZKpHMghX8N5COAeKQJyBg+XLxLsJGjJJowRmXYAE6eP/iz6sgtaIDwgcpuYR2/RbxjknuZ15q8XtkhMPJNCIF85ZLlIzbQxHJnNtA14Cs1o6jgyApSrpls8t7MNkMt0ekFxDvGYGzIB1DRaANPW5YpyTmfdoFImwEvxPrTvDj0EOadXIByZ9HEoCT1N4EedmeGC8co+4sATQUz/3oPXmmin3p4Q4vjpejClhwvasy8efckkolLeINzVU/SZLSXXYcTqD1O6L+qlIuF92y9bVNnaQV7FJdev27bGBhk1UN8cnxXV7kwesVxz3cbdeYrRzKwIDAQAB",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Manage and track your Amazon orders",
   "permissions": [
     "storage",
@@ -12,6 +12,7 @@
   ],
   "host_permissions": [
     "*://*.amazon.com/*",
+    "*://*.facebook.com/*",
     "https://*.amazoncognito.com/*",
     "https://cognito-idp.us-west-1.amazonaws.com/*"
   ],
@@ -30,10 +31,19 @@
       "js": [
         "src/content/content.ts"
       ]
+    },
+    {
+      "matches": [
+        "*://*.facebook.com/marketplace/create/*"
+      ],
+      "js": [
+        "src/content/fbFormFiller/index.ts"
+      ]
     }
   ],
   "background": {
     "service_worker": "src/background/background.ts",
     "type": "module"
-  }
+  },
+  "options_page": "src/options/options.html"
 }

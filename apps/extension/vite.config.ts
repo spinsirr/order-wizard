@@ -15,4 +15,11 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      input: {
+        options: 'src/options/options.html',
+      },
+    },
+  },
 });

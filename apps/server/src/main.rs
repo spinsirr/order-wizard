@@ -128,12 +128,7 @@ async fn main() {
         .expect("Failed to connect to MongoDB");
 
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin, _| {
-            origin
-                .to_str()
-                .map(|s| s.starts_with("chrome-extension://") || s.starts_with("moz-extension://"))
-                .unwrap_or(false)
-        }))
+        .allow_origin(AllowOrigin::mirror_request())
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .expose_headers([header::CONTENT_TYPE])
@@ -165,13 +160,14 @@ async fn main() {
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
 
+    // CORS must be outermost (last) to handle preflight OPTIONS before rate limiting
     let app = if enable_swagger {
         router
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
-            .layer(cors)
             .layer(rate_limit)
+            .layer(cors)
     } else {
-        router.layer(cors).layer(rate_limit)
+        router.layer(rate_limit).layer(cors)
     };
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());

@@ -42,3 +42,6 @@ Cargo.lock
 *.pem
 .cache/
 apps/extension/extension.zip
+
+# Git worktrees
+.worktrees/
