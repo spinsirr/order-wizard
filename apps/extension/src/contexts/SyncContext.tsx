@@ -16,93 +16,72 @@ interface SyncContextValue {
 const SyncContext = createContext<SyncContextValue | null>(null);
 
 /**
- * Sync orders on login:
- * 1. First, delete from cloud (process pending deletions)
- * 2. Then, download remaining cloud orders
- * 3. Upload local orders that don't exist in cloud
+ * Pull and merge orders using Last Write Wins strategy.
+ * - Match by orderNumber
+ * - Compare updatedAt, keep newest version
+ * - Soft-deleted orders sync to cloud, then physically delete locally
  */
-async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
+async function pullAndMerge(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
   if (!apiRepository) return;
 
   console.log('[Sync] Starting sync for user:', userId);
 
-  // Step 1: Get local state and pending deletions
-  const [localOrders, deletedOrderNumbers] = await Promise.all([
+  const [localOrders, cloudOrders] = await Promise.all([
     localRepository.getAll(),
-    localRepository.getDeletedOrderNumbers(),
+    apiRepository.getAll(),
   ]);
 
-  console.log('[Sync] Local orders:', localOrders.length, 'Pending deletions:', deletedOrderNumbers.length);
+  console.log('[Sync] Local:', localOrders.length, 'Cloud:', cloudOrders.length);
 
-  // Step 2: Get cloud orders to find IDs for deletion
-  const cloudOrders = await apiRepository.getAll();
-  console.log('[Sync] Cloud orders:', cloudOrders.length);
+  const localMap = new Map(localOrders.map((o) => [o.orderNumber, o]));
+  const cloudMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
+  const allOrderNumbers = new Set([...localMap.keys(), ...cloudMap.keys()]);
 
-  const cloudOrderMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
+  let localChanged = false;
 
-  // Step 3: Queue and process deletions FIRST (before downloading)
-  // Queue deletions for soft-deleted orders
-  for (const localOrder of localOrders) {
-    if (localOrder.deletedAt) {
-      const cloudOrder = cloudOrderMap.get(localOrder.orderNumber);
-      if (cloudOrder) {
-        syncQueue.add({ type: 'delete', orderId: cloudOrder.id });
+  for (const orderNumber of allOrderNumbers) {
+    const local = localMap.get(orderNumber);
+    const cloud = cloudMap.get(orderNumber);
+
+    if (local && cloud) {
+      // Both exist → compare updatedAt, keep newest
+      const localTime = local.updatedAt || local.createdAt || '';
+      const cloudTime = cloud.updatedAt || cloud.createdAt || '';
+
+      if (localTime > cloudTime) {
+        // Local is newer → push to cloud
+        syncQueue.add({ type: 'upsert', order: { ...local, userId } });
+      } else if (cloudTime > localTime) {
+        // Cloud is newer → update local
+        await localRepository.save(cloud);
+        localChanged = true;
       }
+      // If equal, no action needed
+    } else if (cloud && !local) {
+      // Cloud only → download to local
+      await localRepository.save(cloud);
+      localChanged = true;
+    } else if (local && !cloud) {
+      // Local only → upload to cloud
+      syncQueue.add({ type: 'upsert', order: { ...local, userId } });
     }
   }
 
-  // Queue deletions for hard-deleted orders (tracked by order number)
-  for (const orderNumber of deletedOrderNumbers) {
-    const cloudOrder = cloudOrderMap.get(orderNumber);
-    if (cloudOrder) {
-      syncQueue.add({ type: 'delete', orderId: cloudOrder.id });
-    }
-  }
-
-  // Process deletions now
+  // Process pending uploads
   await syncQueue.process();
-  console.log('[Sync] Deletions processed');
 
-  // Cleanup local deletion tracking
-  await localRepository.clearDeletedOrderNumbers();
-  for (const localOrder of localOrders) {
-    if (localOrder.deletedAt) {
-      await localRepository.delete(localOrder.id);
+  // Cleanup: physically delete soft-deleted orders that have been synced
+  const updatedLocalOrders = await localRepository.getAll();
+  for (const order of updatedLocalOrders) {
+    if (order.deletedAt) {
+      await localRepository.delete(order.id);
+      localChanged = true;
     }
   }
 
-  // Step 4: Re-fetch cloud orders (after deletions) and download new ones
-  const updatedCloudOrders = await apiRepository.getAll();
-  const localOrderMap = new Map(localOrders.filter(o => !o.deletedAt).map((o) => [o.orderNumber, o]));
-
-  const ordersToDownload: Order[] = [];
-  for (const cloudOrder of updatedCloudOrders) {
-    if (!localOrderMap.has(cloudOrder.orderNumber)) {
-      ordersToDownload.push(cloudOrder);
-    }
-  }
-
-  console.log('[Sync] Downloading:', ordersToDownload.length, 'orders from cloud');
-
-  if (ordersToDownload.length > 0) {
-    for (const order of ordersToDownload) {
-      await localRepository.save(order);
-    }
+  if (localChanged) {
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
   }
-
-  // Step 5: Upload local orders that don't exist in cloud
-  const updatedCloudOrderMap = new Map(updatedCloudOrders.map((o) => [o.orderNumber, o]));
-  for (const localOrder of localOrders) {
-    if (localOrder.deletedAt) continue;
-
-    if (!updatedCloudOrderMap.has(localOrder.orderNumber)) {
-      syncQueue.add({ type: 'create', order: { ...localOrder, userId } });
-    }
-  }
-
-  // Process uploads
-  await syncQueue.process();
 
   console.log('[Sync] Sync completed');
 }
@@ -117,7 +96,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const syncMutation = useMutation({
     mutationFn: () => {
       if (!userId) throw new Error('User ID not available');
-      return pullCloudOrders(userId, queryClient);
+      return pullAndMerge(userId, queryClient);
     },
     onSuccess: () => {
       setLastSyncedAt(new Date());
@@ -144,7 +123,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const handleMessage = (message: { type?: string; order?: Order }) => {
       if (message.type === 'ORDER_SAVED' && message.order) {
         // Queue the new order for sync
-        syncQueue.add({ type: 'create', order: { ...message.order, userId } });
+        syncQueue.add({ type: 'upsert', order: { ...message.order, userId } });
       }
     };
     chrome.runtime.onMessage.addListener(handleMessage);
