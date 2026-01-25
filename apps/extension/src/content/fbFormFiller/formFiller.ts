@@ -15,16 +15,46 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
   dispatchInputEvent(element);
 }
 
-async function waitForElement(selector: string, timeout = 10000): Promise<Element> {
+/**
+ * Find an input/textarea by its associated label text.
+ * Facebook uses <label><div><span>Label</span><input/></div></label> structure.
+ */
+function findInputByLabelText(labelText: string): HTMLInputElement | HTMLTextAreaElement | null {
+  // Find all spans and look for one with matching text
+  const spans = document.querySelectorAll('span');
+  for (const span of spans) {
+    if (span.textContent?.trim() === labelText) {
+      // Found the label span, now find the associated input
+      const label = span.closest('label');
+      if (label) {
+        const input = label.querySelector('input, textarea');
+        if (input) {
+          return input as HTMLInputElement | HTMLTextAreaElement;
+        }
+      }
+      // Also try finding input as sibling within same parent div
+      const parent = span.parentElement;
+      if (parent) {
+        const input = parent.querySelector('input, textarea');
+        if (input) {
+          return input as HTMLInputElement | HTMLTextAreaElement;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function waitForInputByLabel(labelText: string, timeout = 10000): Promise<HTMLInputElement | HTMLTextAreaElement> {
   return new Promise((resolve, reject) => {
-    const element = document.querySelector(selector);
-    if (element) {
-      resolve(element);
+    const input = findInputByLabelText(labelText);
+    if (input) {
+      resolve(input);
       return;
     }
 
     const observer = new MutationObserver(() => {
-      const el = document.querySelector(selector);
+      const el = findInputByLabelText(labelText);
       if (el) {
         observer.disconnect();
         resolve(el);
@@ -35,7 +65,7 @@ async function waitForElement(selector: string, timeout = 10000): Promise<Elemen
 
     setTimeout(() => {
       observer.disconnect();
-      reject(new Error(`Timeout waiting for ${selector}`));
+      reject(new Error(`Timeout waiting for input with label "${labelText}"`));
     }, timeout);
   });
 }
@@ -75,32 +105,36 @@ async function uploadImages(images: string[]): Promise<void> {
 export async function fillFBForm(listing: FBListingData): Promise<void> {
   console.log('[FB FormFiller] Filling form with:', listing);
 
-  // Wait for form to load
-  await new Promise((r) => setTimeout(r, 2000));
+  // Wait for page to load
+  await new Promise(r => setTimeout(r, 2000));
 
   // Fill title
   try {
-    const titleInput = (await waitForElement('[aria-label="Title"]')) as HTMLInputElement;
+    const titleInput = await waitForInputByLabel('Title');
     setNativeValue(titleInput, listing.title);
-    await new Promise((r) => setTimeout(r, 500));
+    console.log('[FB FormFiller] Title filled');
   } catch (e) {
     console.warn('[FB FormFiller] Failed to fill title:', e);
   }
 
+  await new Promise(r => setTimeout(r, 300));
+
   // Fill price
   try {
-    const priceInput = (await waitForElement('[aria-label="Price"]')) as HTMLInputElement;
+    const priceInput = await waitForInputByLabel('Price');
     setNativeValue(priceInput, listing.price);
-    await new Promise((r) => setTimeout(r, 500));
+    console.log('[FB FormFiller] Price filled');
   } catch (e) {
     console.warn('[FB FormFiller] Failed to fill price:', e);
   }
 
+  await new Promise(r => setTimeout(r, 300));
+
   // Fill description
   try {
-    const descInput = (await waitForElement('[aria-label="Description"]')) as HTMLTextAreaElement;
+    const descInput = await waitForInputByLabel('Description');
     setNativeValue(descInput, listing.description);
-    await new Promise((r) => setTimeout(r, 500));
+    console.log('[FB FormFiller] Description filled');
   } catch (e) {
     console.warn('[FB FormFiller] Failed to fill description:', e);
   }
@@ -108,6 +142,7 @@ export async function fillFBForm(listing: FBListingData): Promise<void> {
   // Upload images
   try {
     await uploadImages(listing.images);
+    console.log('[FB FormFiller] Images uploaded');
   } catch (e) {
     console.warn('[FB FormFiller] Failed to upload images:', e);
   }

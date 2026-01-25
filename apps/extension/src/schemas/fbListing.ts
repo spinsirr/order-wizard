@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { FBCondition, FBCategory } from '@/types';
+import { FBCondition, FBCategory, PriceRounding } from '@/types';
 
 export const FBListingTemplateSchema = z.object({
   discountPercent: z.number().min(0).max(100),
+  priceRounding: z.enum(PriceRounding),
   condition: z.enum(FBCondition),
   category: z.enum(FBCategory),
   pickupLocation: z.string(),

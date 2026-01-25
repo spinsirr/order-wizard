@@ -37,9 +37,14 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
   }
   console.log('📅 Order Date:', orderDate);
 
-  // Extract product image
+  // Extract product image - prefer high-res version
   const productImageElement = orderCard.querySelector('.product-image img') as HTMLImageElement;
-  const productImage = productImageElement?.src || productImageElement?.dataset.aHires || '';
+  let productImage = productImageElement?.dataset.aHires || productImageElement?.src || '';
+  // Replace small size parameters with high-res _AC_SL1500_ (1500px)
+  // Thumbnail: ._AC_US40_. or ._SX300_SY300_. -> ._AC_SL1500_.
+  if (productImage) {
+    productImage = productImage.replace(/\._[^.]+_\.(?=jpg|png|gif|webp|jpeg)/i, '._AC_SL1500_.');
+  }
   console.log('🖼️ Product Image:', productImage);
 
   // Extract price - find the column with "Total" label

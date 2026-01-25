@@ -31,6 +31,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ status: 'OK' });
       break;
 
+    case 'FETCH_URL':
+      // Fetch URL from background to avoid CORS issues
+      handleFetchUrl(message.url)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ error: error.message }));
+      return true; // Keep channel open for async response
+
     case 'FB_QUEUE_PROCESS':
       processNextFBItem();
       break;
@@ -52,6 +59,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+async function handleFetchUrl(url: string): Promise<{ html?: string; error?: string }> {
+  try {
+    const response = await fetch(url, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      return { error: `Failed to fetch: ${response.status}` };
+    }
+    const html = await response.text();
+    return { html };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
 
 /**
  * Listen for storage changes and broadcast to popup

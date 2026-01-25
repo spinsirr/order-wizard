@@ -165,13 +165,14 @@ async fn main() {
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
 
+    // CORS must be outermost (last) to handle preflight OPTIONS before rate limiting
     let app = if enable_swagger {
         router
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
-            .layer(cors)
             .layer(rate_limit)
+            .layer(cors)
     } else {
-        router.layer(cors).layer(rate_limit)
+        router.layer(rate_limit).layer(cors)
     };
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());

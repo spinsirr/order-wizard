@@ -1,17 +1,18 @@
 import type { ProductDetails } from '@/types';
 
 export async function scrapeProductPage(productUrl: string): Promise<ProductDetails> {
-  const response = await fetch(productUrl, {
-    credentials: 'include',
+  // Fetch via background script to avoid CORS issues
+  const result = await chrome.runtime.sendMessage({
+    type: 'FETCH_URL',
+    url: productUrl,
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch product page: ${response.status}`);
+  if (result.error) {
+    throw new Error(`Failed to fetch product page: ${result.error}`);
   }
 
-  const html = await response.text();
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(result.html, 'text/html');
 
   // Extract description from "About this item" section
   const descriptionItems = doc.querySelectorAll('#feature-bullets li span');
@@ -30,26 +31,95 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
 
   // Extract high-res images
   const images: string[] = [];
+  const seenImageIds = new Set<string>();
 
-  // Main image
-  const mainImage = doc.querySelector('#landingImage') as HTMLImageElement;
-  if (mainImage?.src) {
-    // Get high-res version by modifying URL
-    const highRes = mainImage.src.replace(/\._[A-Z]{2}\d+_\./, '.');
-    images.push(highRes);
+  // Helper to extract image ID from Amazon URL (e.g., "71eG75FTJJL" from ".../I/71eG75FTJJL._AC_SL1500_.jpg")
+  const getImageId = (url: string): string | null => {
+    const match = url.match(/\/I\/([A-Za-z0-9+_-]+)\./);
+    return match ? match[1] : null;
+  };
+
+  // Helper to add image if not duplicate
+  const addImage = (url: string): boolean => {
+    const imageId = getImageId(url);
+    if (imageId && seenImageIds.has(imageId)) return false;
+    if (imageId) seenImageIds.add(imageId);
+    images.push(url);
+    return true;
+  };
+
+  // Helper to get high-res URL by removing/replacing size constraints
+  const toHighRes = (url: string): string => {
+    // Match various Amazon thumbnail patterns and replace with high-res
+    // Examples: ._AC_US40_. ._SS40_. ._SX38_SY50_. ._AC_SR38,50_. ._CR0,0,38,50_.
+    return url.replace(/\._[A-Z0-9_,]+_\.(?=jpg|png|webp|gif)/i, '._AC_SL1500_.');
+  };
+
+  // 1. Try data-a-dynamic-image attribute (JSON with all image sizes)
+  const landingImage = doc.querySelector('#landingImage');
+  const dynamicImageData = landingImage?.getAttribute('data-a-dynamic-image');
+  if (dynamicImageData) {
+    try {
+      const imageMap = JSON.parse(dynamicImageData) as Record<string, [number, number]>;
+      // Sort by largest dimension and get the biggest
+      const sortedUrls = Object.entries(imageMap).sort(
+        ([, a], [, b]) => Math.max(b[0], b[1]) - Math.max(a[0], a[1])
+      );
+      if (sortedUrls[0]) {
+        addImage(sortedUrls[0][0]);
+      }
+    } catch {
+      // JSON parse failed, continue to fallbacks
+    }
   }
 
-  // Thumbnail images (for alternate views)
-  const thumbnails = doc.querySelectorAll('#altImages img');
-  thumbnails.forEach((thumb) => {
-    const img = thumb as HTMLImageElement;
-    if (img.src && !img.src.includes('play-button')) {
-      const highRes = img.src.replace(/\._[A-Z]{2}\d+_\./, '.').replace(/\._[A-Z]+\d+,\d+_\./, '.');
-      if (!images.includes(highRes)) {
-        images.push(highRes);
+  // 2. Try data-old-hires attribute (direct high-res URL)
+  const oldHires = landingImage?.getAttribute('data-old-hires');
+  if (oldHires) {
+    addImage(oldHires);
+  }
+
+  // 3. Try colorImages from script tags (Amazon embeds image data in JS)
+  const scripts = doc.querySelectorAll('script:not([src])');
+  for (const script of scripts) {
+    const content = script.textContent || '';
+    // Check if this script contains colorImages data
+    if (content.includes("'colorImages'") || content.includes('"colorImages"')) {
+      // Extract all hiRes URLs directly with regex (more reliable than JSON parsing)
+      const hiResMatches = content.matchAll(/"hiRes"\s*:\s*"([^"]+)"/g);
+      for (const match of hiResMatches) {
+        const url = match[1];
+        if (url && url.startsWith('http')) {
+          addImage(url);
+        }
+      }
+      // Also try "large" URLs as fallback
+      if (images.length === 0) {
+        const largeMatches = content.matchAll(/"large"\s*:\s*"([^"]+)"/g);
+        for (const match of largeMatches) {
+          const url = match[1];
+          if (url && url.startsWith('http')) {
+            addImage(url);
+          }
+        }
       }
     }
-  });
+  }
+
+  // 4. Fallback: Main image src with high-res conversion
+  const mainImage = landingImage as HTMLImageElement | null;
+  if (mainImage?.src && images.length === 0) {
+    addImage(toHighRes(mainImage.src));
+  }
+
+  // 5. Thumbnail images (for alternate views)
+  const thumbnails = doc.querySelectorAll('#altImages img');
+  for (const thumb of thumbnails) {
+    const img = thumb as HTMLImageElement;
+    if (img.src && !img.src.includes('play-button')) {
+      addImage(toHighRes(img.src));
+    }
+  }
 
   // Try to detect category from breadcrumbs
   const breadcrumbs = doc.querySelectorAll('#wayfinding-breadcrumbs_feature_div li a');

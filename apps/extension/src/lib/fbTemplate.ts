@@ -1,4 +1,9 @@
-import { DEFAULT_TEMPLATE, type FBListingTemplate, FB_CONDITION_LABELS } from '@/types';
+import {
+  DEFAULT_TEMPLATE,
+  type FBListingTemplate,
+  FB_CONDITION_LABELS,
+  PriceRounding,
+} from '@/types';
 import { FBListingTemplateSchema } from '@/schemas';
 
 const TEMPLATE_KEY = 'fb_listing_template';
@@ -18,6 +23,18 @@ export async function saveTemplate(template: FBListingTemplate): Promise<void> {
   await chrome.storage.local.set({ [TEMPLATE_KEY]: validated });
 }
 
+function roundPrice(price: number, rounding: PriceRounding): number {
+  switch (rounding) {
+    case PriceRounding.Nearest5:
+      return Math.round(price / 5) * 5;
+    case PriceRounding.Nearest10:
+      return Math.round(price / 10) * 10;
+    case PriceRounding.None:
+    default:
+      return price;
+  }
+}
+
 export function applyTemplate(
   template: FBListingTemplate,
   data: {
@@ -28,7 +45,12 @@ export function applyTemplate(
   }
 ): { description: string; price: string } {
   const priceNum = parseFloat(data.originalPrice.replace(/[^0-9.]/g, ''));
-  const sellingPrice = (priceNum * (template.discountPercent / 100)).toFixed(2);
+  const discountedPrice = priceNum * (template.discountPercent / 100);
+  const roundedPrice = roundPrice(discountedPrice, template.priceRounding);
+  const sellingPrice =
+    template.priceRounding === PriceRounding.None
+      ? roundedPrice.toFixed(2)
+      : roundedPrice.toString();
 
   const description = template.descriptionTemplate
     .replace(/{productName}/g, data.productName)

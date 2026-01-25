@@ -4,8 +4,10 @@ import {
   DEFAULT_TEMPLATE,
   FB_CONDITION_LABELS,
   FB_CATEGORY_LABELS,
+  PRICE_ROUNDING_LABELS,
   type FBCondition,
   type FBCategory,
+  type PriceRounding,
   type FBListingTemplate,
 } from '@/types';
 
@@ -75,6 +77,30 @@ export function Options() {
               <span>10%</span>
               <span>100%</span>
             </div>
+          </div>
+
+          {/* Price Rounding */}
+          <div>
+            <label
+              htmlFor="priceRounding"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Price Rounding
+            </label>
+            <select
+              id="priceRounding"
+              value={template.priceRounding}
+              onChange={(e) =>
+                setTemplate({ ...template, priceRounding: e.target.value as PriceRounding })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {Object.entries(PRICE_ROUNDING_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Condition */}

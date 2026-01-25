@@ -25,6 +25,20 @@ export const FBCategory = {
 
 export type FBCategory = (typeof FBCategory)[keyof typeof FBCategory];
 
+export const PriceRounding = {
+  None: 'none',
+  Nearest5: 'nearest_5',
+  Nearest10: 'nearest_10',
+} as const;
+
+export type PriceRounding = (typeof PriceRounding)[keyof typeof PriceRounding];
+
+export const PRICE_ROUNDING_LABELS: Record<PriceRounding, string> = {
+  [PriceRounding.None]: 'No rounding',
+  [PriceRounding.Nearest5]: 'Round to nearest $5',
+  [PriceRounding.Nearest10]: 'Round to nearest $10',
+};
+
 export const FB_CATEGORY_LABELS: Record<FBCategory, string> = {
   [FBCategory.General]: 'General',
   [FBCategory.Electronics]: 'Electronics',
@@ -46,6 +60,7 @@ export type QueueItemStatus = (typeof QueueItemStatus)[keyof typeof QueueItemSta
 
 export interface FBListingTemplate {
   discountPercent: number;
+  priceRounding: PriceRounding;
   condition: FBCondition;
   category: FBCategory;
   pickupLocation: string;
@@ -83,7 +98,8 @@ export interface ProductDetails {
 }
 
 export const DEFAULT_TEMPLATE: FBListingTemplate = {
-  discountPercent: 80,
+  discountPercent: 70,
+  priceRounding: PriceRounding.Nearest5,
   condition: FBCondition.New,
   category: FBCategory.General,
   pickupLocation: '',
@@ -93,8 +109,6 @@ export const DEFAULT_TEMPLATE: FBListingTemplate = {
 {productDescription}
 
 Condition: {condition}
-Original price: \${originalPrice}
-Purchased: {orderDate}
 
 Pickup only. Message me if interested!`,
 };

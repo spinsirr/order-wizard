@@ -90,18 +90,6 @@ const textareaStyle: React.CSSProperties = {
   resize: 'vertical' as const,
 };
 
-const priceRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '16px',
-  alignItems: 'flex-end',
-};
-
-const originalPriceStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: '#6b7280',
-  marginBottom: '12px',
-};
-
 const imageGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
@@ -246,20 +234,15 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
             />
           </div>
 
-          <div style={priceRowStyle}>
-            <div style={{ ...fieldStyle, flex: 1 }}>
-              <label htmlFor="fb-listing-price" style={labelStyle}>Price</label>
-              <input
-                type="text"
-                id="fb-listing-price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-          </div>
-          <div style={originalPriceStyle}>
-            Original price: ${listing.originalPrice}
+          <div style={fieldStyle}>
+            <label htmlFor="fb-listing-price" style={labelStyle}>Price</label>
+            <input
+              type="text"
+              id="fb-listing-price"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              style={inputStyle}
+            />
           </div>
 
           <div style={{ display: 'flex', gap: '16px' }}>

@@ -23,6 +23,8 @@ stop:
 build:
     cd apps/extension && bun run build
     cd apps/server && cargo build --release
+    rm -rf /mnt/c/order-wizard-ext
+    cp -r apps/extension/dist /mnt/c/order-wizard-ext
 
 # Run all checks (typecheck + lint + clippy)
 check:
