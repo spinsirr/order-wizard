@@ -3,11 +3,6 @@ import type { Order } from '@/types';
 export class LocalStorageRepository {
   private readonly STORAGE_KEY = 'orders';
   private readonly DELETED_ORDERS_KEY = 'deleted_order_numbers';
-  private currentUserId: string | null = null;
-
-  setCurrentUserId(userId: string | null): void {
-    this.currentUserId = userId;
-  }
 
   private async getAllOrders(): Promise<Order[]> {
     const result = await chrome.storage.local.get(this.STORAGE_KEY);
@@ -55,11 +50,7 @@ export class LocalStorageRepository {
   }
 
   async getAll(): Promise<Order[]> {
-    const orders = await this.getAllOrders();
-    if (!this.currentUserId) {
-      return orders;
-    }
-    return orders.filter((order) => order.userId === this.currentUserId);
+    return this.getAllOrders();
   }
 
   async update(id: string, updates: Partial<Order>): Promise<void> {

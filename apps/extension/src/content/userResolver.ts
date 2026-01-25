@@ -1,6 +1,4 @@
-import { CURRENT_USER_STORAGE_KEY, LOCAL_USER_ID } from '@/constants';
-
-export { LOCAL_USER_ID };
+import { CURRENT_USER_STORAGE_KEY } from '@/constants';
 
 export interface StoredUser {
   id: string;
@@ -8,8 +6,8 @@ export interface StoredUser {
   name?: string;
 }
 
-const LOCAL_USER: StoredUser = {
-  id: LOCAL_USER_ID,
+const DEFAULT_USER: StoredUser = {
+  id: 'local',
 };
 
 let cachedUser: StoredUser | null = null;
@@ -41,7 +39,7 @@ export async function getCurrentUser(): Promise<StoredUser> {
   }
 
   const storedUser = await readCurrentUserFromStorage();
-  cachedUser = storedUser ?? LOCAL_USER;
+  cachedUser = storedUser ?? DEFAULT_USER;
   return cachedUser;
 }
 

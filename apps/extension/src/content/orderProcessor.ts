@@ -12,8 +12,6 @@ export interface SaveOrderResult {
 }
 
 export async function saveOrder(orderCard: Element, userId: string): Promise<SaveOrderResult> {
-  localRepository.setCurrentUserId(userId);
-
   const scrapedData = scrapeOrderData(orderCard);
 
   // Read orders and deleted order numbers in parallel
