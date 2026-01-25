@@ -119,14 +119,23 @@ impl JwksVerifier {
     }
 
     /// Verify and decode a JWT token
-    async fn verify_token(&self, token: &str) -> Result<Claims, String> {
+    async fn verify_token(&self, token: &str) -> Result<Claims, &'static str> {
         // Decode header to get kid
-        let header = decode_header(token).map_err(|e| format!("Invalid token header: {}", e))?;
+        let header = decode_header(token).map_err(|e| {
+            tracing::debug!("Invalid token header: {}", e);
+            "Invalid token"
+        })?;
 
-        let kid = header.kid.ok_or("Token missing kid claim")?;
+        let kid = header.kid.ok_or_else(|| {
+            tracing::debug!("Token missing kid claim");
+            "Invalid token"
+        })?;
 
         // Get the decoding key
-        let key = self.get_key(&kid).await?;
+        let key = self.get_key(&kid).await.map_err(|e| {
+            tracing::debug!("Failed to get key: {}", e);
+            "Invalid token"
+        })?;
 
         // Set up validation
         let mut validation = Validation::new(header.alg);
@@ -134,8 +143,10 @@ impl JwksVerifier {
         validation.set_audience(&[&self.client_id]);
 
         // Decode and verify
-        let token_data = decode::<Claims>(token, &key, &validation)
-            .map_err(|e| format!("Token validation failed: {}", e))?;
+        let token_data = decode::<Claims>(token, &key, &validation).map_err(|e| {
+            tracing::debug!("Token validation failed: {}", e);
+            "Invalid token"
+        })?;
 
         Ok(token_data.claims)
     }
