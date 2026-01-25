@@ -8,6 +8,7 @@ import {
   showFBButtonError,
 } from './injector';
 import { showPreviewModal } from './previewModal';
+import { showFloatingQueue } from './floatingQueue';
 import { getTemplate, applyTemplate, fbQueue } from '@/lib';
 import type { FBListingData } from '@/types';
 
@@ -86,6 +87,7 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
 
 export function initFBMarketplace(): void {
   console.log('FB Marketplace listing feature initialized');
+  showFloatingQueue();
   injectFBButtons(handleListOnFB);
   setupFBMutationObserver(handleListOnFB);
 }
