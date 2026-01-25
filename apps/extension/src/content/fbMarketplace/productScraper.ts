@@ -89,7 +89,7 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
       const hiResMatches = content.matchAll(/"hiRes"\s*:\s*"([^"]+)"/g);
       for (const match of hiResMatches) {
         const url = match[1];
-        if (url && url.startsWith('http')) {
+        if (url?.startsWith('http')) {
           addImage(url);
         }
       }
@@ -98,7 +98,7 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
         const largeMatches = content.matchAll(/"large"\s*:\s*"([^"]+)"/g);
         for (const match of largeMatches) {
           const url = match[1];
-          if (url && url.startsWith('http')) {
+          if (url?.startsWith('http')) {
             addImage(url);
           }
         }

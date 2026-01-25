@@ -29,7 +29,6 @@ function roundPrice(price: number, rounding: PriceRounding): number {
       return Math.round(price / 5) * 5;
     case PriceRounding.Nearest10:
       return Math.round(price / 10) * 10;
-    case PriceRounding.None:
     default:
       return price;
   }

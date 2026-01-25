@@ -2,39 +2,34 @@ import { initializeErrorHandlers } from '@/lib';
 import { fillFBForm } from './formFiller';
 import type { FBListingData } from '@/types';
 
+const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
+
 initializeErrorHandlers();
 
 console.log('[FB FormFiller] Content script loaded on FB Marketplace');
 
-// Notify background that we're ready
-chrome.runtime.sendMessage({ type: 'FB_FORM_READY' });
+// Read listing from storage and fill the form
+async function init(): Promise<void> {
+  const result = await chrome.storage.local.get(FB_PENDING_LISTING_KEY);
+  const listing = result[FB_PENDING_LISTING_KEY] as FBListingData | undefined;
 
-// Listen for fill commands
-chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
-  if (message.type === 'FB_FILL_FORM') {
-    const listing = message.listing as FBListingData;
-    const itemId = message.itemId as string;
-
-    fillFBForm(listing)
-      .then(() => {
-        console.log('[FB FormFiller] Fill complete, waiting for user to publish');
-        // Update status to waiting
-        chrome.runtime.sendMessage({
-          type: 'FB_LISTING_WAITING',
-          itemId,
-        });
-      })
-      .catch((error) => {
-        console.error('[FB FormFiller] Fill failed:', error);
-        chrome.runtime.sendMessage({
-          type: 'FB_LISTING_FAILED',
-          itemId,
-          error: error.message,
-        });
-      });
+  if (!listing) {
+    console.log('[FB FormFiller] No pending listing found in storage');
+    return;
   }
-  return false;
-});
 
-// Listing completion is detected by fbListingComplete content script
-// which runs when FB navigates to /marketplace/item/*
+  console.log('[FB FormFiller] Found pending listing:', listing.title);
+
+  // Clear the pending listing from storage
+  await chrome.storage.local.remove(FB_PENDING_LISTING_KEY);
+
+  // Fill the form
+  try {
+    await fillFBForm(listing);
+    console.log('[FB FormFiller] Form filled successfully');
+  } catch (error) {
+    console.error('[FB FormFiller] Failed to fill form:', error);
+  }
+}
+
+init();

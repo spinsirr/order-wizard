@@ -8,8 +8,10 @@ import {
   showFBButtonError,
 } from './injector';
 import { showPreviewModal } from './previewModal';
-import { getTemplate, applyTemplate, fbQueue } from '@/lib';
+import { getTemplate, applyTemplate } from '@/lib';
 import type { FBListingData } from '@/types';
+
+const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
 
 async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Promise<void> {
   showFBButtonLoading(button);
@@ -47,9 +49,22 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
       orderDate: orderData.orderDate,
     });
 
-    // Prepare listing data
+    // Prepare listing data - truncate title smartly at comma/space
+    const truncateTitle = (name: string, maxLen: number): string => {
+      if (name.length <= maxLen) return name;
+      const truncated = name.slice(0, maxLen);
+      // Try to find a comma or space to break at
+      const lastComma = truncated.lastIndexOf(',');
+      const lastSpace = truncated.lastIndexOf(' ');
+      const breakPoint = Math.max(lastComma, lastSpace);
+      if (breakPoint > maxLen * 0.5) {
+        return truncated.slice(0, breakPoint).trim();
+      }
+      return truncated.trim();
+    };
+
     const listing: FBListingData = {
-      title: orderData.productName.slice(0, 100), // FB title limit
+      title: truncateTitle(orderData.productName, 80),
       description,
       price,
       originalPrice: orderData.price.replace(/[^0-9.]/g, ''),
@@ -68,10 +83,9 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
     showPreviewModal(
       listing,
       async (finalListing) => {
-        // Add to queue
-        await fbQueue.add(finalListing);
-        // Send message to background to process
-        chrome.runtime.sendMessage({ type: 'FB_QUEUE_PROCESS' });
+        // Store listing and open FB Marketplace
+        await chrome.storage.local.set({ [FB_PENDING_LISTING_KEY]: finalListing });
+        chrome.runtime.sendMessage({ type: 'OPEN_FB_MARKETPLACE' });
       },
       () => {
         // Cancelled

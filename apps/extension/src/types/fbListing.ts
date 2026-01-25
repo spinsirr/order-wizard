@@ -48,16 +48,6 @@ export const FB_CATEGORY_LABELS: Record<FBCategory, string> = {
   [FBCategory.Sports]: 'Sports & Outdoors',
 };
 
-export const QueueItemStatus = {
-  Pending: 'pending',
-  Filling: 'filling',
-  Waiting: 'waiting',
-  Done: 'done',
-  Failed: 'failed',
-} as const;
-
-export type QueueItemStatus = (typeof QueueItemStatus)[keyof typeof QueueItemStatus];
-
 export interface FBListingTemplate {
   discountPercent: number;
   priceRounding: PriceRounding;
@@ -80,14 +70,6 @@ export interface FBListingData {
   orderNumber: string;
   orderDate: string;
   productUrl?: string;
-}
-
-export interface FBQueueItem {
-  id: string;
-  listing: FBListingData;
-  status: QueueItemStatus;
-  error?: string;
-  createdAt: string;
 }
 
 export interface ProductDetails {
