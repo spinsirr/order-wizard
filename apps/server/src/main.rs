@@ -128,12 +128,7 @@ async fn main() {
         .expect("Failed to connect to MongoDB");
 
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin, _| {
-            origin
-                .to_str()
-                .map(|s| s.starts_with("chrome-extension://") || s.starts_with("moz-extension://"))
-                .unwrap_or(false)
-        }))
+        .allow_origin(AllowOrigin::mirror_request())
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .expose_headers([header::CONTENT_TYPE])
