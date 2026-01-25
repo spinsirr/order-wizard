@@ -1,4 +1,4 @@
-FROM rust:1.83-slim AS builder
+FROM rust:1.85-slim AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 
 COPY --from=builder /app/target/release/server /usr/local/bin/server
 
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=3000
+EXPOSE 3000
 
 CMD ["server"]
