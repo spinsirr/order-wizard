@@ -41,3 +41,4 @@ Cargo.lock
 # Misc
 *.pem
 .cache/
+apps/extension/extension.zip
