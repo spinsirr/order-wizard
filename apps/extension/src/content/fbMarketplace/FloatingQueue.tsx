@@ -108,6 +108,17 @@ const itemStatusStyle: React.CSSProperties = {
   textTransform: 'capitalize',
 };
 
+const itemActionButtonStyle: React.CSSProperties = {
+  background: 'none',
+  border: '1px solid #d1d5db',
+  borderRadius: '4px',
+  padding: '2px 6px',
+  fontSize: '10px',
+  color: '#6b7280',
+  cursor: 'pointer',
+  marginLeft: '4px',
+};
+
 const progressBarContainerStyle: React.CSSProperties = {
   padding: '8px 16px 12px',
   borderTop: '1px solid #f0f0f0',
@@ -202,6 +213,15 @@ export function FloatingQueue() {
 
   const handleClear = async () => {
     await fbQueue.clear();
+  };
+
+  const handleMarkDone = async (itemId: string) => {
+    await fbQueue.updateStatus(itemId, 'done');
+    // Clear current item if it's the one being marked done
+    const { fb_current_item } = await chrome.storage.local.get('fb_current_item');
+    if (fb_current_item === itemId) {
+      await chrome.storage.local.remove('fb_current_item');
+    }
   };
 
   const visibleItems = queue.slice(0, MAX_VISIBLE_ITEMS);
@@ -300,6 +320,16 @@ export function FloatingQueue() {
                     {item.listing.title}
                   </span>
                   <span style={itemStatusStyle}>{item.status}</span>
+                  {(item.status === 'waiting' || item.status === 'filling') && (
+                    <button
+                      type="button"
+                      style={itemActionButtonStyle}
+                      onClick={() => handleMarkDone(item.id)}
+                      title="Mark as done"
+                    >
+                      ✓
+                    </button>
+                  )}
                 </div>
               ))}
               {hiddenCount > 0 && (
