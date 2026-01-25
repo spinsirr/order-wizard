@@ -34,7 +34,7 @@ export function useOrders() {
  */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
@@ -43,9 +43,12 @@ export function useUpdateOrderStatus() {
       // Update locally first (offline-first)
       await localRepository.update(id, { status, updatedAt });
 
-      // Queue for cloud sync (non-blocking)
-      if (isAuthenticated) {
-        syncQueue.add({ type: 'update', orderId: id, data: { status, updatedAt } });
+      // Queue for cloud sync (non-blocking) - upsert the full order
+      if (isAuthenticated && user) {
+        const order = await localRepository.getById(id);
+        if (order) {
+          syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
+        }
       }
     },
     onMutate: async ({ id, status }) => {
@@ -66,30 +69,26 @@ export function useUpdateOrderStatus() {
 }
 
 /**
- * Delete orders
+ * Delete orders (unified soft delete)
  */
 export function useDeleteOrders() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const deletedAt = new Date().toISOString();
+      const now = new Date().toISOString();
 
-      if (isAuthenticated) {
-        // Soft delete locally, queue for cloud sync
-        for (const id of ids) {
-          await localRepository.update(id, { deletedAt });
-          syncQueue.add({ type: 'delete', orderId: id });
-        }
-      } else {
-        // Not authenticated - track for later sync, delete locally
-        const orders = await localRepository.getAll();
-        const ordersToDelete = orders.filter((o) => ids.includes(o.id));
+      // Soft delete locally (same for logged in or not)
+      for (const id of ids) {
+        await localRepository.update(id, { deletedAt: now, updatedAt: now });
 
-        for (const order of ordersToDelete) {
-          await localRepository.trackDeletedOrderNumber(order.orderNumber);
-          await localRepository.delete(order.id);
+        // Queue for cloud sync if authenticated
+        if (isAuthenticated && user) {
+          const order = await localRepository.getById(id);
+          if (order) {
+            syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
+          }
         }
       }
     },
