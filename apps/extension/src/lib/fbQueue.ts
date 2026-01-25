@@ -9,6 +9,24 @@ class FBQueue {
   private cachedQueue: FBQueueItem[] = [];
   private hydrated = false;
   private paused = false;
+  private storageListenerAttached = false;
+
+  constructor() {
+    this.attachStorageListener();
+  }
+
+  private attachStorageListener(): void {
+    if (this.storageListenerAttached) return;
+    this.storageListenerAttached = true;
+
+    // Listen for storage changes from other contexts (background, content scripts)
+    chrome.storage.local.onChanged.addListener((changes) => {
+      if (changes[FB_QUEUE_KEY]) {
+        this.cachedQueue = (changes[FB_QUEUE_KEY].newValue as FBQueueItem[]) || [];
+        this.notifyListeners();
+      }
+    });
+  }
 
   async getQueue(): Promise<FBQueueItem[]> {
     const result = await chrome.storage.local.get(FB_QUEUE_KEY);
