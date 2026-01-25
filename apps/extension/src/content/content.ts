@@ -9,6 +9,7 @@ import {
   showErrorFeedback,
   showRefreshFeedback,
 } from './injector';
+import { initFBMarketplace } from './fbMarketplace';
 
 initializeErrorHandlers();
 
@@ -36,10 +37,12 @@ async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): P
 }
 
 function init(): void {
-  console.log('🚀 Amazon Order Wizard content script loaded');
+  console.log('Amazon Order Wizard content script loaded');
 
   injectSaveButtons(handleSaveClick);
   setupMutationObserver(handleSaveClick);
+
+  initFBMarketplace();
 }
 
 if (document.readyState === 'loading') {
