@@ -13,32 +13,20 @@ export interface SaveOrderResult {
 
 export async function saveOrder(orderCard: Element, userId: string): Promise<SaveOrderResult> {
   const scrapedData = scrapeOrderData(orderCard);
-
-  // Read orders and deleted order numbers in parallel
-  const [allOrders, deletedOrderNumbers] = await Promise.all([
-    localRepository.getAll(),
-    localRepository.getDeletedOrderNumbers(),
-  ]);
+  const allOrders = await localRepository.getAll();
 
   // Check if order already exists (non-deleted)
   const existingOrder = allOrders.find(
-    (o) => o.orderNumber === scrapedData.orderNumber && !o.deletedAt
+    (o: Order) => o.orderNumber === scrapedData.orderNumber && !o.deletedAt
   );
 
   if (existingOrder) {
     return { success: false, isDuplicate: true };
   }
 
-  // Check if order was previously deleted (skip if re-saving)
-  const wasDeleted = deletedOrderNumbers.includes(scrapedData.orderNumber);
-  if (wasDeleted) {
-    // Clear from deleted list so it can be saved
-    await localRepository.removeDeletedOrderNumber(scrapedData.orderNumber);
-  }
-
   // Check if there's a soft-deleted order with the same orderNumber
   const deletedOrder = allOrders.find(
-    (o) => o.orderNumber === scrapedData.orderNumber && o.deletedAt
+    (o: Order) => o.orderNumber === scrapedData.orderNumber && o.deletedAt
   );
 
   let order: Order;
