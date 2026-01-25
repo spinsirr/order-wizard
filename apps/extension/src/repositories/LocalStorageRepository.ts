@@ -2,7 +2,6 @@ import type { Order } from '@/types';
 
 export class LocalStorageRepository {
   private readonly STORAGE_KEY = 'orders';
-  private readonly DELETED_ORDERS_KEY = 'deleted_order_numbers';
 
   private async getAllOrders(): Promise<Order[]> {
     const result = await chrome.storage.local.get(this.STORAGE_KEY);
@@ -11,31 +10,6 @@ export class LocalStorageRepository {
 
   private async saveAllOrders(orders: Order[]): Promise<void> {
     await chrome.storage.local.set({ [this.STORAGE_KEY]: orders });
-  }
-
-  async trackDeletedOrderNumber(orderNumber: string): Promise<void> {
-    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
-    const deleted = (result[this.DELETED_ORDERS_KEY] as string[]) || [];
-    if (!deleted.includes(orderNumber)) {
-      deleted.push(orderNumber);
-      await chrome.storage.local.set({ [this.DELETED_ORDERS_KEY]: deleted });
-    }
-  }
-
-  async getDeletedOrderNumbers(): Promise<string[]> {
-    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
-    return (result[this.DELETED_ORDERS_KEY] as string[]) || [];
-  }
-
-  async clearDeletedOrderNumbers(): Promise<void> {
-    await chrome.storage.local.remove(this.DELETED_ORDERS_KEY);
-  }
-
-  async removeDeletedOrderNumber(orderNumber: string): Promise<void> {
-    const result = await chrome.storage.local.get(this.DELETED_ORDERS_KEY);
-    const deleted = (result[this.DELETED_ORDERS_KEY] as string[]) || [];
-    const filtered = deleted.filter((n) => n !== orderNumber);
-    await chrome.storage.local.set({ [this.DELETED_ORDERS_KEY]: filtered });
   }
 
   async save(order: Order): Promise<void> {
