@@ -121,13 +121,10 @@ async fn main() {
     JwksVerifier::init(issuer, client_id);
     tracing::info!("JWT verifier initialized");
 
-    // Initialize database (optional - server can still serve auth endpoints without it)
-    if let Err(e) = db::init_db().await {
-        tracing::warn!(
-            "Failed to connect to MongoDB: {}. Order endpoints will not work.",
-            e
-        );
-    }
+    // Initialize database connection
+    db::init_db()
+        .await
+        .expect("Failed to connect to MongoDB");
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
