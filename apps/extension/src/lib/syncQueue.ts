@@ -1,14 +1,14 @@
 import { apiRepository } from '@/config';
-import type { Order, OrderStatus } from '@/types';
+import type { Order } from '@/types';
 
 const SYNC_QUEUE_KEY = 'sync_queue';
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // Exponential backoff
 
+// Simplified operation types: upsert (create or update) and delete
 export type SyncOperation =
-  | { type: 'create'; order: Order }
-  | { type: 'update'; orderId: string; data: { status?: OrderStatus; note?: string; updatedAt: string; deletedAt?: string } }
-  | { type: 'delete'; orderId: string };
+  | { type: 'upsert'; order: Order }
+  | { type: 'delete'; orderId: string; orderNumber: string };
 
 interface QueueItem {
   id: string;
@@ -36,13 +36,16 @@ class SyncQueue {
   async add(operation: SyncOperation): Promise<void> {
     const queue = await this.getQueue();
 
-    // Dedupe: remove existing operation for same orderId
-    const orderId = operation.type === 'create' ? operation.order.id : operation.orderId;
+    // Dedupe by orderNumber: remove existing operation for same order
+    const orderNumber = operation.type === 'upsert'
+      ? operation.order.orderNumber
+      : operation.orderNumber;
+
     const filtered = queue.filter((item) => {
-      const itemOrderId = item.operation.type === 'create'
-        ? item.operation.order.id
-        : item.operation.orderId;
-      return itemOrderId !== orderId;
+      const itemOrderNumber = item.operation.type === 'upsert'
+        ? item.operation.order.orderNumber
+        : item.operation.orderNumber;
+      return itemOrderNumber !== orderNumber;
     });
 
     filtered.push({
@@ -107,11 +110,8 @@ class SyncQueue {
     if (!apiRepository) throw new Error('API not available');
 
     switch (op.type) {
-      case 'create':
+      case 'upsert':
         await apiRepository.save(op.order);
-        break;
-      case 'update':
-        await apiRepository.update(op.orderId, op.data);
         break;
       case 'delete':
         await apiRepository.delete(op.orderId);
