@@ -5,9 +5,10 @@ interface UserBarProps {
   isSyncing?: boolean;
   lastSyncedAt?: Date | null;
   pendingCount?: number;
+  onSync?: () => void;
 }
 
-export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0 }: UserBarProps) {
+export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0, onSync }: UserBarProps) {
   const { isLoading, isAuthenticated, user, signIn, signOut } = useAuth();
 
   const displayEmail = user?.email ?? '';
@@ -60,23 +61,31 @@ export function UserBar({ isSyncing = false, lastSyncedAt, pendingCount = 0 }: U
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {(isSyncing || pendingCount > 0) && (
+              {isSyncing ? (
                 <div
                   className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm text-muted-foreground"
                   title={lastSyncedAt ? `Last synced: ${lastSyncedAt.toLocaleTimeString()}` : 'Syncing...'}
                 >
-                  {isSyncing ? (
-                    <>
-                      <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
-                      <span>Syncing...</span>
-                    </>
-                  ) : pendingCount > 0 ? (
-                    <>
-                      <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
-                      <span>{pendingCount} pending</span>
-                    </>
-                  ) : null}
+                  <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
+                  <span>Syncing...</span>
                 </div>
+              ) : pendingCount > 0 ? (
+                <div
+                  className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm text-muted-foreground"
+                >
+                  <span className="animate-spin inline-block h-4 w-4 border-2 border-foreground border-t-transparent rounded-full" />
+                  <span>{pendingCount} pending</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-lg border border-border/60 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                  onClick={onSync}
+                  disabled={isSyncing}
+                  title={lastSyncedAt ? `Last synced: ${lastSyncedAt.toLocaleTimeString()}` : 'Sync now'}
+                >
+                  Sync
+                </button>
               )}
               <button
                 type="button"

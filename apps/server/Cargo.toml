@@ -21,3 +21,4 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 dotenvy = "0.15"
 jsonwebtoken = "9"
 reqwest = { version = "0.12", features = ["json"] }
+tower_governor = "0.8"

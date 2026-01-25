@@ -11,6 +11,7 @@ interface SyncContextValue {
   isSyncing: boolean;
   lastSyncedAt: Date | null;
   pendingCount: number;
+  triggerSync: () => void;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -130,8 +131,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => chrome.runtime.onMessage.removeListener(handleMessage);
   }, [isAuthenticated, userId]);
 
+  const triggerSync = () => {
+    if (isAuthenticated && userId && !syncMutation.isPending) {
+      syncMutation.mutate();
+    }
+  };
+
   return (
-    <SyncContext.Provider value={{ isSyncing: syncMutation.isPending, lastSyncedAt, pendingCount }}>
+    <SyncContext.Provider value={{ isSyncing: syncMutation.isPending, lastSyncedAt, pendingCount, triggerSync }}>
       {children}
     </SyncContext.Provider>
   );
@@ -140,7 +147,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 export function useSync(): SyncContextValue {
   const context = useContext(SyncContext);
   if (!context) {
-    return { isSyncing: false, lastSyncedAt: null, pendingCount: 0 };
+    return { isSyncing: false, lastSyncedAt: null, pendingCount: 0, triggerSync: () => {} };
   }
   return context;
 }

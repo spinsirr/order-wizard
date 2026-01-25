@@ -9,7 +9,7 @@ import { ORDERS_KEY } from '@/constants';
 
 function AppContent() {
   const queryClient = useQueryClient();
-  const { isSyncing, lastSyncedAt, pendingCount } = useSync();
+  const { isSyncing, lastSyncedAt, pendingCount, triggerSync } = useSync();
 
   useEffect(() => {
     initializeErrorHandlers();
@@ -33,6 +33,7 @@ function AppContent() {
         isSyncing={isSyncing}
         lastSyncedAt={lastSyncedAt}
         pendingCount={pendingCount}
+        onSync={triggerSync}
       />
       <OrderTable />
     </div>
