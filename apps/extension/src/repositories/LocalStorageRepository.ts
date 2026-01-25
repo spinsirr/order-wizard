@@ -40,7 +40,8 @@ export class LocalStorageRepository {
 
   async save(order: Order): Promise<void> {
     const orders = await this.getAllOrders();
-    const existingIndex = orders.findIndex((o) => o.id === order.id);
+    // Use orderNumber for dedup (cloud and local orders may have different ids)
+    const existingIndex = orders.findIndex((o) => o.orderNumber === order.orderNumber);
     if (existingIndex !== -1) {
       orders[existingIndex] = order;
     } else {

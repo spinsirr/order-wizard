@@ -16,53 +16,31 @@ interface SyncContextValue {
 const SyncContext = createContext<SyncContextValue | null>(null);
 
 /**
- * Pull cloud orders on login (one-time download)
- * Local changes are synced via the queue in useOrders mutations
+ * Sync orders on login:
+ * 1. First, delete from cloud (process pending deletions)
+ * 2. Then, download remaining cloud orders
+ * 3. Upload local orders that don't exist in cloud
  */
 async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof useQueryClient>) {
   if (!apiRepository) return;
 
-  console.log('[Sync] Pulling cloud orders for user:', userId);
+  console.log('[Sync] Starting sync for user:', userId);
 
-  const [localOrders, cloudOrders, deletedOrderNumbers] = await Promise.all([
+  // Step 1: Get local state and pending deletions
+  const [localOrders, deletedOrderNumbers] = await Promise.all([
     localRepository.getAll(),
-    apiRepository.getAll(),
     localRepository.getDeletedOrderNumbers(),
   ]);
 
-  console.log('[Sync] Local:', localOrders.length, 'Cloud:', cloudOrders.length);
+  console.log('[Sync] Local orders:', localOrders.length, 'Pending deletions:', deletedOrderNumbers.length);
 
-  const localOrderMap = new Map(localOrders.map((o) => [o.orderNumber, o]));
+  // Step 2: Get cloud orders to find IDs for deletion
+  const cloudOrders = await apiRepository.getAll();
+  console.log('[Sync] Cloud orders:', cloudOrders.length);
+
   const cloudOrderMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
-  const deletedSet = new Set(deletedOrderNumbers);
 
-  // Download orders that exist in cloud but not locally (and not deleted)
-  const ordersToDownload: Order[] = [];
-  for (const cloudOrder of cloudOrders) {
-    if (!localOrderMap.has(cloudOrder.orderNumber) && !deletedSet.has(cloudOrder.orderNumber)) {
-      ordersToDownload.push(cloudOrder);
-    }
-  }
-
-  console.log('[Sync] Downloading:', ordersToDownload.length, 'orders from cloud');
-
-  if (ordersToDownload.length > 0) {
-    for (const order of ordersToDownload) {
-      await localRepository.save(order);
-    }
-    queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-  }
-
-  // Upload local orders that don't exist in cloud yet
-  for (const localOrder of localOrders) {
-    if (localOrder.deletedAt) continue;
-
-    if (!cloudOrderMap.has(localOrder.orderNumber)) {
-      // Queue for upload - server will set userId from JWT
-      syncQueue.add({ type: 'create', order: { ...localOrder, userId } });
-    }
-  }
-
+  // Step 3: Queue and process deletions FIRST (before downloading)
   // Queue deletions for soft-deleted orders
   for (const localOrder of localOrders) {
     if (localOrder.deletedAt) {
@@ -81,10 +59,11 @@ async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof us
     }
   }
 
-  // Process the queue
+  // Process deletions now
   await syncQueue.process();
+  console.log('[Sync] Deletions processed');
 
-  // Cleanup soft-deleted and tracked deletions
+  // Cleanup local deletion tracking
   await localRepository.clearDeletedOrderNumbers();
   for (const localOrder of localOrders) {
     if (localOrder.deletedAt) {
@@ -92,7 +71,40 @@ async function pullCloudOrders(userId: string, queryClient: ReturnType<typeof us
     }
   }
 
-  console.log('[Sync] Pull completed');
+  // Step 4: Re-fetch cloud orders (after deletions) and download new ones
+  const updatedCloudOrders = await apiRepository.getAll();
+  const localOrderMap = new Map(localOrders.filter(o => !o.deletedAt).map((o) => [o.orderNumber, o]));
+
+  const ordersToDownload: Order[] = [];
+  for (const cloudOrder of updatedCloudOrders) {
+    if (!localOrderMap.has(cloudOrder.orderNumber)) {
+      ordersToDownload.push(cloudOrder);
+    }
+  }
+
+  console.log('[Sync] Downloading:', ordersToDownload.length, 'orders from cloud');
+
+  if (ordersToDownload.length > 0) {
+    for (const order of ordersToDownload) {
+      await localRepository.save(order);
+    }
+    queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+  }
+
+  // Step 5: Upload local orders that don't exist in cloud
+  const updatedCloudOrderMap = new Map(updatedCloudOrders.map((o) => [o.orderNumber, o]));
+  for (const localOrder of localOrders) {
+    if (localOrder.deletedAt) continue;
+
+    if (!updatedCloudOrderMap.has(localOrder.orderNumber)) {
+      syncQueue.add({ type: 'create', order: { ...localOrder, userId } });
+    }
+  }
+
+  // Process uploads
+  await syncQueue.process();
+
+  console.log('[Sync] Sync completed');
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
