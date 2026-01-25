@@ -1,4 +1,24 @@
+import ky, { type KyInstance } from 'ky';
+import { z } from 'zod';
 import type { Order } from '@/types';
+import { OrderStatus } from '@/types';
+
+const ApiOrderSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  orderNumber: z.string(),
+  productName: z.string(),
+  orderDate: z.string(),
+  productImage: z.string(),
+  price: z.string(),
+  status: z.enum(OrderStatus),
+  note: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  deletedAt: z.string().nullish().transform((v) => v ?? undefined),
+});
+
+const ApiOrdersResponseSchema = z.array(ApiOrderSchema);
 
 /**
  * API Repository - for cloud sync only
@@ -9,93 +29,53 @@ import type { Order } from '@/types';
  * - deleteAll(): delete orders from cloud
  */
 export class ApiRepository {
-  private readonly baseUrl: string;
+  private api: KyInstance;
   private accessToken: string | null = null;
 
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+    this.api = ky.create({
+      prefixUrl: baseUrl,
+      timeout: 30_000,
+      retry: 0, // Let TanStack Query handle retries
+      hooks: {
+        beforeRequest: [
+          (request) => {
+            if (this.accessToken) {
+              request.headers.set('Authorization', `Bearer ${this.accessToken}`);
+            }
+          },
+        ],
+      },
+    });
   }
 
   setAccessToken(token: string | null): void {
     this.accessToken = token;
   }
 
-  private get headers(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (this.accessToken) {
-      headers.Authorization = `Bearer ${this.accessToken}`;
-    }
-    return headers;
-  }
-
   async getAll(): Promise<Order[]> {
-    const response = await fetch(`${this.baseUrl}/orders`, {
-      headers: this.headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch orders: ${response.statusText}`);
-    }
-
-    return response.json();
+    const data = await this.api.get('orders').json();
+    return ApiOrdersResponseSchema.parse(data);
   }
 
   async saveAll(orders: Order[]): Promise<void> {
-    // Server POST /orders handles upsert
-    await Promise.all(
-      orders.map((order) =>
-        fetch(`${this.baseUrl}/orders`, {
-          method: 'POST',
-          headers: this.headers,
-          body: JSON.stringify(order),
-        })
-      )
-    );
+    await Promise.all(orders.map((order) => this.api.post('orders', { json: order })));
   }
 
   async deleteAll(ids: string[]): Promise<void> {
-    await Promise.all(
-      ids.map((id) =>
-        fetch(`${this.baseUrl}/orders/${id}`, {
-          method: 'DELETE',
-          headers: this.headers,
-        })
-      )
-    );
+    await Promise.all(ids.map((id) => this.api.delete(`orders/${id}`)));
   }
 
   // Single-item operations for sync queue
   async save(order: Order): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/orders`, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(order),
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to save order: ${response.statusText}`);
-    }
+    await this.api.post('orders', { json: order });
   }
 
   async update(id: string, data: Partial<Order>): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/orders/${id}`, {
-      method: 'PATCH',
-      headers: this.headers,
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to update order: ${response.statusText}`);
-    }
+    await this.api.patch(`orders/${id}`, { json: data });
   }
 
   async delete(id: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/orders/${id}`, {
-      method: 'DELETE',
-      headers: this.headers,
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete order: ${response.statusText}`);
-    }
+    await this.api.delete(`orders/${id}`);
   }
 }

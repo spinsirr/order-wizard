@@ -17,7 +17,13 @@ function AppContent() {
 
   // Listen for orders saved from content script to refresh UI
   useEffect(() => {
-    const handleMessage = (message: { type?: string }) => {
+    const handleMessage = (
+      message: { type?: string },
+      sender: chrome.runtime.MessageSender
+    ) => {
+      // Only accept messages from our own extension
+      if (sender.id !== chrome.runtime.id) return;
+
       if (message.type === 'ORDER_SAVED') {
         queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
       }

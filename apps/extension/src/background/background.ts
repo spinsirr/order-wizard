@@ -8,7 +8,10 @@ console.log('🚀 Amazon Order Wizard background service worker loaded');
 /**
  * Handle all runtime messages
  */
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Only accept messages from our own extension
+  if (sender.id !== chrome.runtime.id) return false;
+
   console.log('📨 Message received:', message);
 
   switch (message.type) {

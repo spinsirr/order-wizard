@@ -161,19 +161,29 @@ async fn main() {
         .merge(protected_routes)
         .split_for_parts();
 
-    let app = router
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
-        .layer(cors)
-        .layer(rate_limit);
+    let enable_swagger = std::env::var("ENABLE_SWAGGER")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
+    let app = if enable_swagger {
+        router
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
+            .layer(cors)
+            .layer(rate_limit)
+    } else {
+        router.layer(cors).layer(rate_limit)
+    };
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
     tracing::info!("Server running on {}", addr);
-    tracing::info!(
-        "Swagger UI available at http://localhost:{}/swagger-ui",
-        port
-    );
+    if enable_swagger {
+        tracing::info!(
+            "Swagger UI available at http://localhost:{}/swagger-ui",
+            port
+        );
+    }
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

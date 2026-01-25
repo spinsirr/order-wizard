@@ -121,7 +121,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated || !apiRepository || !userId) return;
 
-    const handleMessage = (message: { type?: string; order?: Order }) => {
+    const handleMessage = (
+      message: { type?: string; order?: Order },
+      sender: chrome.runtime.MessageSender
+    ) => {
+      // Only accept messages from our own extension
+      if (sender.id !== chrome.runtime.id) return;
+
       if (message.type === 'ORDER_SAVED' && message.order) {
         // Queue the new order for sync
         syncQueue.add({ type: 'upsert', order: { ...message.order, userId } });
