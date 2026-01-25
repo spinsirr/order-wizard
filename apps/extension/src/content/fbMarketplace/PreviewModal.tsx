@@ -108,7 +108,7 @@ const imageGridStyle: React.CSSProperties = {
   gap: '12px',
 };
 
-const imageContainerStyle = (isSelected: boolean): React.CSSProperties => ({
+const imageButtonStyle = (isSelected: boolean): React.CSSProperties => ({
   position: 'relative',
   aspectRatio: '1',
   borderRadius: '8px',
@@ -117,6 +117,8 @@ const imageContainerStyle = (isSelected: boolean): React.CSSProperties => ({
   border: isSelected ? '3px solid #1877F2' : '3px solid transparent',
   opacity: isSelected ? 1 : 0.5,
   transition: 'all 0.2s',
+  padding: 0,
+  background: 'none',
 });
 
 const imageStyle: React.CSSProperties = {
@@ -212,18 +214,32 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
     }
   };
 
+  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onCancel();
+    }
+  };
+
   return (
-    <div style={overlayStyle} onClick={handleOverlayClick}>
+    <div
+      style={overlayStyle}
+      onClick={handleOverlayClick}
+      onKeyDown={handleOverlayKeyDown}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="preview-modal-title"
+    >
       <div style={modalStyle}>
         <div style={headerStyle}>
-          <h2 style={headerTitleStyle}>Preview Listing</h2>
+          <h2 id="preview-modal-title" style={headerTitleStyle}>Preview Listing</h2>
         </div>
 
         <div style={bodyStyle}>
           <div style={fieldStyle}>
-            <label style={labelStyle}>Title</label>
+            <label htmlFor="fb-listing-title" style={labelStyle}>Title</label>
             <input
               type="text"
+              id="fb-listing-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               style={inputStyle}
@@ -232,9 +248,10 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
 
           <div style={priceRowStyle}>
             <div style={{ ...fieldStyle, flex: 1 }}>
-              <label style={labelStyle}>Price</label>
+              <label htmlFor="fb-listing-price" style={labelStyle}>Price</label>
               <input
                 type="text"
+                id="fb-listing-price"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 style={inputStyle}
@@ -247,8 +264,9 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
 
           <div style={{ display: 'flex', gap: '16px' }}>
             <div style={{ ...fieldStyle, flex: 1 }}>
-              <label style={labelStyle}>Condition</label>
+              <label htmlFor="fb-listing-condition" style={labelStyle}>Condition</label>
               <select
+                id="fb-listing-condition"
                 value={condition}
                 onChange={(e) => setCondition(e.target.value as FBCondition)}
                 style={selectStyle}
@@ -262,8 +280,9 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
             </div>
 
             <div style={{ ...fieldStyle, flex: 1 }}>
-              <label style={labelStyle}>Category</label>
+              <label htmlFor="fb-listing-category" style={labelStyle}>Category</label>
               <select
+                id="fb-listing-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value as FBCategory)}
                 style={selectStyle}
@@ -278,8 +297,9 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
           </div>
 
           <div style={fieldStyle}>
-            <label style={labelStyle}>Description</label>
+            <label htmlFor="fb-listing-description" style={labelStyle}>Description</label>
             <textarea
+              id="fb-listing-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               style={textareaStyle}
@@ -287,21 +307,24 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
           </div>
 
           <div style={fieldStyle}>
-            <label style={labelStyle}>
+            <span style={labelStyle}>
               Images ({selectedImages.size} selected - click to toggle)
-            </label>
+            </span>
             <div style={imageGridStyle}>
               {listing.images.map((imageUrl, index) => {
                 const isSelected = selectedImages.has(imageUrl);
                 return (
-                  <div
-                    key={index}
-                    style={imageContainerStyle(isSelected)}
+                  <button
+                    type="button"
+                    key={imageUrl}
+                    style={imageButtonStyle(isSelected)}
                     onClick={() => handleImageToggle(imageUrl)}
+                    aria-pressed={isSelected}
+                    aria-label={`Toggle product image ${index + 1}`}
                   >
-                    <img src={imageUrl} alt={`Image ${index + 1}`} style={imageStyle} />
+                    <img src={imageUrl} alt={`Product ${index + 1}`} style={imageStyle} />
                     {isSelected && <div style={checkmarkStyle}>✓</div>}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -310,6 +333,7 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
 
         <div style={footerStyle}>
           <button
+            type="button"
             style={cancelButtonStyle}
             onClick={onCancel}
             onMouseEnter={(e) => {
@@ -322,6 +346,7 @@ export function PreviewModal({ listing, onConfirm, onCancel }: PreviewModalProps
             Cancel
           </button>
           <button
+            type="button"
             style={confirmButtonStyle}
             onClick={handleConfirm}
             disabled={selectedImages.size === 0}

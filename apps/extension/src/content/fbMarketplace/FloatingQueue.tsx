@@ -162,6 +162,7 @@ const minimizedBadgeStyle: React.CSSProperties = {
   boxShadow: '0 4px 12px rgba(24, 119, 242, 0.4)',
   fontSize: '14px',
   fontWeight: 500,
+  border: 'none',
 };
 
 const MAX_VISIBLE_ITEMS = 5;
@@ -215,12 +216,16 @@ export function FloatingQueue() {
   if (minimized) {
     return (
       <div style={containerStyle}>
-        <div style={minimizedBadgeStyle} onClick={() => setMinimized(false)}>
+        <button
+          type="button"
+          style={minimizedBadgeStyle}
+          onClick={() => setMinimized(false)}
+        >
           <span>FB Queue</span>
           <span style={{ fontWeight: 'bold' }}>
             {completedCount}/{totalCount}
           </span>
-        </div>
+        </button>
       </div>
     );
   }
@@ -236,6 +241,7 @@ export function FloatingQueue() {
           </h3>
           <div style={headerButtonsStyle}>
             <button
+              type="button"
               style={iconButtonStyle}
               onClick={handlePauseResume}
               title={paused ? 'Resume' : 'Pause'}
@@ -249,6 +255,7 @@ export function FloatingQueue() {
               {paused ? '▶' : '⏸'}
             </button>
             <button
+              type="button"
               style={iconButtonStyle}
               onClick={handleClear}
               title="Clear all"
@@ -262,6 +269,7 @@ export function FloatingQueue() {
               ✕
             </button>
             <button
+              type="button"
               style={iconButtonStyle}
               onClick={() => setMinimized(true)}
               title="Minimize"

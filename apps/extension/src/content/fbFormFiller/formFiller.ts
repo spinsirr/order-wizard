@@ -65,7 +65,9 @@ async function uploadImages(images: string[]): Promise<void> {
 
   // Create a DataTransfer to set files
   const dt = new DataTransfer();
-  files.forEach((f) => dt.items.add(f));
+  for (const f of files) {
+    dt.items.add(f);
+  }
   fileInput.files = dt.files;
   fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 }

@@ -4,8 +4,8 @@ import {
   DEFAULT_TEMPLATE,
   FB_CONDITION_LABELS,
   FB_CATEGORY_LABELS,
-  FBCondition,
-  FBCategory,
+  type FBCondition,
+  type FBCategory,
   type FBListingTemplate,
 } from '@/types';
 
