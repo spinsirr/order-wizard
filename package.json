@@ -1,6 +1,6 @@
 {
   "name": "order-wizard",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "private": true,
   "workspaces": ["apps/*"],
   "packageManager": "bun@1.1.38"
