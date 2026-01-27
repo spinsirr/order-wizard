@@ -55,6 +55,9 @@ We use AWS Cognito for optional authentication. When you sign in, your authentic
 ### Amazon
 We access Amazon order pages only when you visit them. We do not have access to your Amazon account credentials.
 
+### Facebook Marketplace
+When you use the "List on Facebook" feature, the extension auto-fills listing forms with your saved order data (product name, price, image). We do not have access to your Facebook account credentials.
+
 ## Data Sharing
 
 We do **NOT**:
@@ -67,7 +70,7 @@ We do **NOT**:
 
 You can:
 - **View** all your saved data within the extension
-- **Export** your data to CSV at any time
+- **Access** your data anytime in the extension
 - **Delete** individual orders or all data
 - **Sign out** to stop cloud sync
 - **Uninstall** the extension to remove all local data
