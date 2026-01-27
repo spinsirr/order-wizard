@@ -34,6 +34,14 @@ Quickly list your Amazon purchases on Facebook Marketplace. Auto-fills product d
 ☁️ Cloud Sync (Optional)
 Sign in to sync your orders across devices. Works completely offline without an account - your data stays local until you choose to sync.
 
+HOW TO USE
+
+1. Go to your Amazon Order History page
+2. Click "Save to Wizard" on any order you want to track
+3. Open the extension from Chrome's side panel to view and manage your orders
+4. Update status as you go: Uncommented → Commented → Comment Revealed → Reimbursed
+5. Want to resell? Click "List on Facebook" to auto-fill a Marketplace listing
+
 PRIVACY
 Your order data is stored locally on your device. Cloud sync is optional and only activates when you sign in.
 
