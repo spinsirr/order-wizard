@@ -77,6 +77,8 @@ export interface ProductDetails {
   features: string[];
   images: string[];
   category?: string;
+  /** Current selling price on Amazon (may differ from original order price) */
+  currentPrice?: string;
 }
 
 export const DEFAULT_TEMPLATE: FBListingTemplate = {

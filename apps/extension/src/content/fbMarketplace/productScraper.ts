@@ -125,10 +125,43 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
   const breadcrumbs = doc.querySelectorAll('#wayfinding-breadcrumbs_feature_div li a');
   const category = breadcrumbs[0]?.textContent?.trim();
 
+  // Extract current price
+  let currentPrice: string | undefined;
+
+  // Try various Amazon price selectors (in order of preference)
+  const priceSelectors = [
+    // Main price display
+    '#corePrice_feature_div .a-price .a-offscreen',
+    '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen',
+    '.a-price[data-a-color="price"] .a-offscreen',
+    // Sale price
+    '#corePrice_feature_div .priceToPay .a-offscreen',
+    // Deal price
+    '#dealsAccordionRow .a-price .a-offscreen',
+    // Kindle/digital price
+    '#kindle-price',
+    // Fallback: any prominent price
+    '.a-price .a-offscreen',
+  ];
+
+  for (const selector of priceSelectors) {
+    const priceEl = doc.querySelector(selector);
+    const priceText = priceEl?.textContent?.trim();
+    if (priceText) {
+      // Extract numeric price (handles "$19.99" format)
+      const match = priceText.match(/[\d,.]+/);
+      if (match) {
+        currentPrice = match[0].replace(/,/g, '');
+        break;
+      }
+    }
+  }
+
   return {
     description,
     features,
     images: images.slice(0, 5), // Limit to 5 images
     category,
+    currentPrice,
   };
 }

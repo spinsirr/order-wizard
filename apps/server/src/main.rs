@@ -9,7 +9,7 @@ use axum::{middleware, Json};
 use serde::Serialize;
 use axum::http::{header, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
@@ -135,9 +135,11 @@ async fn main() {
         .allow_credentials(true);
 
     // Rate limiting: 60 requests per minute per IP
+    // Use SmartIpKeyExtractor to get IP from X-Forwarded-For header (required behind Fly.io proxy)
     let governor_config = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(60)
+        .key_extractor(SmartIpKeyExtractor)
         .finish()
         .expect("Failed to create rate limiter config");
     let rate_limit = GovernorLayer::new(governor_config);

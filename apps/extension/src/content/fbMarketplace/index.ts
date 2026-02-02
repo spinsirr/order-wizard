@@ -9,7 +9,7 @@ import {
 } from './injector';
 import { showPreviewModal } from './previewModal';
 import { getTemplate, applyTemplate } from '@/lib';
-import type { FBListingData } from '@/types';
+import type { FBListingData, ProductDetails } from '@/types';
 
 const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
 
@@ -28,7 +28,7 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
     const template = await getTemplate();
 
     // Scrape product details if we have URL
-    let productDetails = { description: '', features: [] as string[], images: [orderData.productImage] };
+    let productDetails: ProductDetails = { description: '', features: [], images: [orderData.productImage] };
     if (productUrl) {
       try {
         productDetails = await scrapeProductPage(productUrl);
@@ -41,11 +41,14 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
       }
     }
 
+    // Use current Amazon price if available, otherwise fall back to order price
+    const basePrice = productDetails.currentPrice || orderData.price;
+
     // Apply template
     const { description, price } = applyTemplate(template, {
       productName: orderData.productName,
       productDescription: productDetails.description || productDetails.features.join('\n'),
-      originalPrice: orderData.price,
+      originalPrice: basePrice,
       orderDate: orderData.orderDate,
     });
 
@@ -67,7 +70,7 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
       title: truncateTitle(orderData.productName, 80),
       description,
       price,
-      originalPrice: orderData.price.replace(/[^0-9.]/g, ''),
+      originalPrice: basePrice.replace(/[^0-9.]/g, ''),
       condition: template.condition,
       category: template.category,
       pickupLocation: template.pickupLocation,
