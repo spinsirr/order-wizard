@@ -11,7 +11,7 @@
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
     "format": "biome format --write",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "wxt prepare && tsc --noEmit",
     "clean": "rm -rf .output dist"
   },
   "dependencies": {
