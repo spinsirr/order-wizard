@@ -4,7 +4,7 @@ use mongodb::bson::doc;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::auth::{AuthError, AuthUser};
-use crate::db::orders_collection;
+use crate::db::{get_client, orders_collection};
 use crate::errors::{AppError, AppResult};
 use crate::models::{BatchDeleteRequest, BatchDeleteResponse, BatchUpsertRequest, BatchUpsertResponse, CreateOrderRequest, Order, OrderStatus, UpdateOrderRequest};
 
@@ -102,24 +102,35 @@ async fn batch_upsert_orders(
     AuthUser(claims): AuthUser,
     Json(payload): Json<BatchUpsertRequest>,
 ) -> AppResult<Json<BatchUpsertResponse>> {
-    tracing::info!("POST /orders/batch - user: {}, count: {}", claims.sub, payload.orders.len());
+    let count = payload.orders.len();
+    if count > 100 {
+        return Err(AppError::bad_request("Batch size exceeds maximum of 100"));
+    }
+    tracing::info!("POST /orders/batch - user: {}, count: {}", claims.sub, count);
 
     let collection = orders_collection();
-    let mut upserted = 0;
+    let mut models = Vec::with_capacity(count);
 
     for order_req in payload.orders {
         let entity = order_req.into_entity(claims.sub.clone());
         let filter = doc! { "order_number": &entity.order_number, "user_id": &entity.user_id };
-        collection
-            .replace_one(filter, &entity)
-            .upsert(true)
-            .await
+        let mut model = collection
+            .replace_one_model(filter, &entity)
             .map_err(AppError::database)?;
-        upserted += 1;
+        model.upsert = Some(true);
+        models.push(model);
     }
 
-    tracing::info!("POST /orders/batch - upserted {} orders", upserted);
-    Ok(Json(BatchUpsertResponse { upserted }))
+    let result = get_client()
+        .bulk_write(models)
+        .ordered(false)
+        .await
+        .map_err(AppError::database)?;
+
+    let upserted = result.modified_count + result.upserted_count + result.inserted_count;
+    tracing::info!("POST /orders/batch - upserted {} orders (inserted: {}, modified: {}, upserted: {})",
+        upserted, result.inserted_count, result.modified_count, result.upserted_count);
+    Ok(Json(BatchUpsertResponse { upserted: upserted as usize }))
 }
 
 #[utoipa::path(

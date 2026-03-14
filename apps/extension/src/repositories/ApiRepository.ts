@@ -64,7 +64,11 @@ export class ApiRepository {
 
   async saveBatch(orders: Order[]): Promise<void> {
     if (orders.length === 0) return;
-    await this.api.post('orders/batch', { json: { orders } });
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+      const chunk = orders.slice(i, i + BATCH_SIZE);
+      await this.api.post('orders/batch', { json: { orders: chunk } });
+    }
   }
 
   async deleteBatchRemote(ids: string[]): Promise<void> {
