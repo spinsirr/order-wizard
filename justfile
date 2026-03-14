@@ -26,11 +26,16 @@ build:
     rm -rf /mnt/c/order-wizard-ext
     cp -r apps/extension/.output/chrome-mv3 /mnt/c/order-wizard-ext
 
-# Run all checks (typecheck + lint + clippy)
+# Run all checks (typecheck + lint + test + clippy)
 check:
     cd apps/extension && bun run typecheck
     cd apps/extension && bun run lint
+    cd apps/extension && bun run test
     cd apps/server && cargo clippy
+
+# Run extension unit tests
+test:
+    cd apps/extension && bun run test
 
 # TypeScript type check
 typecheck:

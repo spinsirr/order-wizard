@@ -1,7 +1,7 @@
 {
   "name": "@order-wizard/extension",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.6",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -12,6 +12,8 @@
     "lint:fix": "biome lint --write",
     "format": "biome format --write",
     "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf .output dist"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
+    "vitest": "^4.1.0",
     "wxt": "^0.20.18"
   }
 }
