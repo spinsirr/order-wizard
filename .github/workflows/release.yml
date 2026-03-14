@@ -82,8 +82,8 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         working-directory: apps/extension
         run: |
-          cd dist
-          zip -r ../amazon-order-wizard-v${{ steps.version.outputs.current }}.zip .
+          cd .output/chrome-mv3
+          zip -r ../../amazon-order-wizard-v${{ steps.version.outputs.current }}.zip .
 
       - name: Create tag
         if: steps.version.outputs.changed == 'true'

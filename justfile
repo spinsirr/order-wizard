@@ -15,7 +15,7 @@ dev: db
 # Stop all dev processes
 stop:
     -pkill -f "target/debug/server"
-    -pkill -f "vite"
+    -pkill -f "wxt"
     -lsof -ti:3000 | xargs -r kill -9
     -lsof -ti:5173 | xargs -r kill -9
 
@@ -24,7 +24,7 @@ build:
     cd apps/extension && bun run build
     cd apps/server && cargo build --release
     rm -rf /mnt/c/order-wizard-ext
-    cp -r apps/extension/dist /mnt/c/order-wizard-ext
+    cp -r apps/extension/.output/chrome-mv3 /mnt/c/order-wizard-ext
 
 # Run all checks (typecheck + lint + clippy)
 check:

@@ -20,14 +20,6 @@ const ApiOrderSchema = z.object({
 
 const ApiOrdersResponseSchema = z.array(ApiOrderSchema);
 
-/**
- * API Repository - for cloud sync only
- *
- * Simple batch interface:
- * - getAll(): download all orders from cloud
- * - saveAll(): upload orders to cloud (upsert)
- * - deleteAll(): delete orders from cloud
- */
 export class ApiRepository {
   private api: KyInstance;
   private accessToken: string | null = null;
@@ -36,7 +28,7 @@ export class ApiRepository {
     this.api = ky.create({
       prefixUrl: baseUrl,
       timeout: 30_000,
-      retry: 0, // Let TanStack Query handle retries
+      retry: 0,
       hooks: {
         beforeRequest: [
           (request) => {
@@ -58,15 +50,6 @@ export class ApiRepository {
     return ApiOrdersResponseSchema.parse(data);
   }
 
-  async saveAll(orders: Order[]): Promise<void> {
-    await Promise.all(orders.map((order) => this.api.post('orders', { json: order })));
-  }
-
-  async deleteAll(ids: string[]): Promise<void> {
-    await Promise.all(ids.map((id) => this.api.delete(`orders/${id}`)));
-  }
-
-  // Single-item operations for sync queue
   async save(order: Order): Promise<void> {
     await this.api.post('orders', { json: order });
   }

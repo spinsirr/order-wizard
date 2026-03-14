@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDeleteOrders, useOrders, useUpdateOrderStatus } from '@/hooks/useOrders';
 import type { OrderStatus } from '@/types';
-import type { OrderSortOption, StatusFilter } from '@/utils';
-import { exportOrders, filterAndSortOrders } from '@/utils';
+import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
+import { filterAndSortOrders } from '@/utils/orderFilters';
 import type { ExportFormat } from '@/utils/orderExport';
+import { exportOrders } from '@/utils/orderExport';
 import { type ConfirmData, DeleteConfirmModal } from './DeleteConfirmModal';
 import { OrderCard } from './OrderCard';
 import { OrderTableEmpty, OrderTableLoading, OrderTableNoResults } from './OrderEmptyStates';

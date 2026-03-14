@@ -88,8 +88,10 @@ export function injectSaveButtons(onSave: SaveHandler): void {
 }
 
 export function setupMutationObserver(onSave: SaveHandler): MutationObserver {
+  let debounceTimer: ReturnType<typeof setTimeout>;
   const observer = new MutationObserver(() => {
-    injectSaveButtons(onSave);
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => injectSaveButtons(onSave), 100);
   });
 
   observer.observe(document.body, {

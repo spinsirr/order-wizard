@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Options } from './Options';
-import '../index.css';
+import { Options } from '@/options/Options';
+import '../sidepanel/index.css';
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

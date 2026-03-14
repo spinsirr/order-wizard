@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
-import { PreviewModal } from './PreviewModal';
+import { PreviewModal } from './PreviewModalComponent';
 import type { FBListingData } from '@/types';
 
 let modalRoot: ReturnType<typeof createRoot> | null = null;
