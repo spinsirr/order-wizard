@@ -82,7 +82,7 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
     const thumbUrl = url.replace(/\._[A-Z]{2}_[A-Z]{2}\d+_\./, '._AC_SL200_.');
     const response = await fetch(thumbUrl);
     const blob = await response.blob();
-    return await new Promise<string>((resolve) => {
+    return await new Promise<string | null>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
