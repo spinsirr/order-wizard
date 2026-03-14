@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { scrapeOrderData } from './scraper';
 import type { Order } from '@/types';
+import type { ExtensionMessage } from '@/types/messages';
 import { OrderStatus } from '@/types';
 import { localRepository } from '@/config';
 
@@ -58,7 +59,7 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
   chrome.runtime.sendMessage({
     type: 'ORDER_SAVED',
     order,
-  }).catch(() => {
+  } satisfies ExtensionMessage).catch(() => {
     // Popup not open, ignore
   });
 

@@ -123,3 +123,27 @@ pub struct UpdateOrderRequest {
     pub updated_at: Option<String>,
     pub deleted_at: Option<String>,
 }
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchUpsertRequest {
+    pub orders: Vec<CreateOrderRequest>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchUpsertResponse {
+    pub upserted: usize,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchDeleteRequest {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchDeleteResponse {
+    pub deleted: usize,
+}

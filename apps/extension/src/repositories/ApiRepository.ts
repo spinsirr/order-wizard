@@ -61,4 +61,14 @@ export class ApiRepository {
   async delete(id: string): Promise<void> {
     await this.api.delete(`orders/${id}`);
   }
+
+  async saveBatch(orders: Order[]): Promise<void> {
+    if (orders.length === 0) return;
+    await this.api.post('orders/batch', { json: { orders } });
+  }
+
+  async deleteBatchRemote(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.api.post('orders/batch-delete', { json: { ids } });
+  }
 }

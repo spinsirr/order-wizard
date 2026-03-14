@@ -6,12 +6,14 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::auth::{AuthError, AuthUser};
 use crate::db::orders_collection;
 use crate::errors::{AppError, AppResult};
-use crate::models::{CreateOrderRequest, Order, OrderStatus, UpdateOrderRequest};
+use crate::models::{BatchDeleteRequest, BatchDeleteResponse, BatchUpsertRequest, BatchUpsertResponse, CreateOrderRequest, Order, OrderStatus, UpdateOrderRequest};
 
 pub fn router() -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(list_orders))
         .routes(routes!(create_order))
+        .routes(routes!(batch_upsert_orders))
+        .routes(routes!(batch_delete_orders))
         .routes(routes!(get_order))
         .routes(routes!(update_order))
         .routes(routes!(delete_order))
@@ -81,6 +83,74 @@ async fn create_order(
 
     tracing::info!("POST /orders - upserted order: {}", entity.id);
     Ok((StatusCode::CREATED, Json(Order::from(entity))))
+}
+
+#[utoipa::path(
+    post,
+    path = "/orders/batch",
+    tag = "Orders",
+    summary = "Batch upsert orders",
+    description = "Upserts multiple orders in a single request",
+    request_body = BatchUpsertRequest,
+    responses(
+        (status = 200, description = "Batch upsert completed", body = BatchUpsertResponse),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
+async fn batch_upsert_orders(
+    AuthUser(claims): AuthUser,
+    Json(payload): Json<BatchUpsertRequest>,
+) -> AppResult<Json<BatchUpsertResponse>> {
+    tracing::info!("POST /orders/batch - user: {}, count: {}", claims.sub, payload.orders.len());
+
+    let collection = orders_collection();
+    let mut upserted = 0;
+
+    for order_req in payload.orders {
+        let entity = order_req.into_entity(claims.sub.clone());
+        let filter = doc! { "order_number": &entity.order_number, "user_id": &entity.user_id };
+        collection
+            .replace_one(filter, &entity)
+            .upsert(true)
+            .await
+            .map_err(AppError::database)?;
+        upserted += 1;
+    }
+
+    tracing::info!("POST /orders/batch - upserted {} orders", upserted);
+    Ok(Json(BatchUpsertResponse { upserted }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/orders/batch-delete",
+    tag = "Orders",
+    summary = "Batch delete orders",
+    description = "Deletes multiple orders by their IDs",
+    request_body = BatchDeleteRequest,
+    responses(
+        (status = 200, description = "Batch delete completed", body = BatchDeleteResponse),
+        (status = 401, description = "Unauthorized", body = AuthError)
+    ),
+    security(("bearer_auth" = []))
+)]
+async fn batch_delete_orders(
+    AuthUser(claims): AuthUser,
+    Json(payload): Json<BatchDeleteRequest>,
+) -> AppResult<Json<BatchDeleteResponse>> {
+    tracing::info!("POST /orders/batch-delete - user: {}, count: {}", claims.sub, payload.ids.len());
+
+    let result = orders_collection()
+        .delete_many(doc! {
+            "id": { "$in": &payload.ids },
+            "user_id": &claims.sub,
+        })
+        .await
+        .map_err(AppError::database)?;
+
+    tracing::info!("POST /orders/batch-delete - deleted {} orders", result.deleted_count);
+    Ok(Json(BatchDeleteResponse { deleted: result.deleted_count as usize }))
 }
 
 #[utoipa::path(

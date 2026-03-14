@@ -1,9 +1,10 @@
 import { initializeErrorHandlers } from '@/lib';
+import type { ExtensionMessage } from '@/types/messages';
 
 export default defineBackground(() => {
   initializeErrorHandlers();
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) return false;
 
     switch (message.type) {
@@ -14,7 +15,7 @@ export default defineBackground(() => {
       case 'FETCH_URL':
         handleFetchUrl(message.url)
           .then(sendResponse)
-          .catch((error) => sendResponse({ error: error.message }));
+          .catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' }));
         return true;
 
       case 'OPEN_FB_MARKETPLACE':

@@ -19,6 +19,7 @@ interface QueueItem {
 
 class SyncQueue {
   private processing = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: Set<() => void> = new Set();
   private cachedCount = 0;
   private hydrated = false;
@@ -58,6 +59,9 @@ class SyncQueue {
     await this.saveQueue(filtered);
     this.notifyListeners();
 
+    // Cancel any pending retry — we'll process the full queue now
+    this.cancelRetryTimer();
+
     // Try to process immediately
     this.process();
   }
@@ -66,6 +70,7 @@ class SyncQueue {
     if (this.processing || !apiRepository) return;
 
     this.processing = true;
+    this.cancelRetryTimer();
     console.log('[SyncQueue] Processing queue...');
 
     try {
@@ -75,19 +80,53 @@ class SyncQueue {
         return;
       }
 
+      // Separate into upserts and deletes for batch processing
+      const upsertItems = queue.filter((item) => item.operation.type === 'upsert');
+      const deleteItems = queue.filter((item) => item.operation.type === 'delete');
       const remaining: QueueItem[] = [];
 
-      for (const item of queue) {
+      // Batch upserts
+      if (upsertItems.length > 0) {
         try {
-          await this.executeOperation(item.operation);
-          console.log('[SyncQueue] Synced:', item.operation.type, item.id);
+          const orders = upsertItems.map((item) => (item.operation as { type: 'upsert'; order: Order }).order);
+          await apiRepository.saveBatch(orders);
+          console.log(`[SyncQueue] Batch upserted ${upsertItems.length} orders`);
         } catch (error) {
-          console.warn('[SyncQueue] Failed:', item.operation.type, error);
+          console.warn('[SyncQueue] Batch upsert failed, falling back to individual:', error);
+          // Fallback: try individually
+          for (const item of upsertItems) {
+            try {
+              await apiRepository.save((item.operation as { type: 'upsert'; order: Order }).order);
+            } catch {
+              if (item.retryCount < MAX_RETRIES) {
+                remaining.push({ ...item, retryCount: item.retryCount + 1 });
+              } else {
+                console.error('[SyncQueue] Max retries exceeded, dropping:', item.id);
+              }
+            }
+          }
+        }
+      }
 
-          if (item.retryCount < MAX_RETRIES) {
-            remaining.push({ ...item, retryCount: item.retryCount + 1 });
-          } else {
-            console.error('[SyncQueue] Max retries exceeded, dropping:', item.id);
+      // Batch deletes
+      if (deleteItems.length > 0) {
+        try {
+          const ids = deleteItems.map((item) => (item.operation as { type: 'delete'; orderId: string }).orderId);
+          await apiRepository.deleteBatchRemote(ids);
+          console.log(`[SyncQueue] Batch deleted ${deleteItems.length} orders`);
+        } catch (error) {
+          console.warn('[SyncQueue] Batch delete failed, falling back to individual:', error);
+          // Fallback: try individually
+          for (const item of deleteItems) {
+            try {
+              await apiRepository.delete((item.operation as { type: 'delete'; orderId: string }).orderId);
+            } catch {
+              if (item.retryCount < MAX_RETRIES) {
+                remaining.push({ ...item, retryCount: item.retryCount + 1 });
+              } else {
+                console.error('[SyncQueue] Max retries exceeded, dropping:', item.id);
+              }
+            }
           }
         }
       }
@@ -100,23 +139,10 @@ class SyncQueue {
         const minRetryCount = Math.min(...remaining.map((item) => item.retryCount));
         const delay = RETRY_DELAYS[Math.min(minRetryCount - 1, RETRY_DELAYS.length - 1)];
         console.log(`[SyncQueue] Retrying ${remaining.length} items in ${delay}ms`);
-        setTimeout(() => this.process(), delay);
+        this.retryTimer = setTimeout(() => this.process(), delay);
       }
     } finally {
       this.processing = false;
-    }
-  }
-
-  private async executeOperation(op: SyncOperation): Promise<void> {
-    if (!apiRepository) throw new Error('API not available');
-
-    switch (op.type) {
-      case 'upsert':
-        await apiRepository.save(op.order);
-        break;
-      case 'delete':
-        await apiRepository.delete(op.orderId);
-        break;
     }
   }
 
@@ -126,6 +152,7 @@ class SyncQueue {
   }
 
   async clear(): Promise<void> {
+    this.cancelRetryTimer();
     await this.saveQueue([]);
     this.notifyListeners();
   }
@@ -148,6 +175,13 @@ class SyncQueue {
 
   getServerSnapshot(): number {
     return 0;
+  }
+
+  private cancelRetryTimer(): void {
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   private notifyListeners(): void {

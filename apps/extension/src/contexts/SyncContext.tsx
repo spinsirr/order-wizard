@@ -6,6 +6,7 @@ import { syncQueue } from '@/lib/syncQueue';
 import { useSyncQueueCount } from '@/hooks/useSyncQueueCount';
 import { ORDERS_KEY } from '@/constants';
 import type { Order } from '@/types';
+import type { ExtensionMessage } from '@/types/messages';
 
 interface SyncContextValue {
   isSyncing: boolean;
@@ -63,14 +64,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     await syncQueue.process();
 
-    // Cleanup soft-deleted orders that have been synced
-    const updatedLocalOrders = await localRepository.getAll();
-    const toDelete = updatedLocalOrders.filter((o) => o.deletedAt).map((o) => o.id);
-    if (toDelete.length > 0) {
-      await localRepository.deleteBatch(toDelete);
+    // Only cleanup soft-deleted orders after confirming the sync queue is fully drained.
+    // If items remain (pending retries), their delete ops haven't been confirmed by the server yet.
+    const pendingCount = await syncQueue.getPendingCount();
+    if (pendingCount === 0) {
+      const updatedLocalOrders = await localRepository.getAll();
+      const toDelete = updatedLocalOrders.filter((o) => o.deletedAt).map((o) => o.id);
+      if (toDelete.length > 0) {
+        await localRepository.deleteBatch(toDelete);
+      }
     }
 
-    if (ordersToSaveLocally.length > 0 || toDelete.length > 0) {
+    if (ordersToSaveLocally.length > 0) {
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     }
   }
@@ -100,7 +105,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Unified ORDER_SAVED listener: invalidate cache + queue for sync
   useEffect(() => {
     const handleMessage = (
-      message: { type?: string; order?: Order; payload?: Order },
+      message: ExtensionMessage,
       sender: chrome.runtime.MessageSender
     ) => {
       if (sender.id !== chrome.runtime.id) return;
@@ -108,9 +113,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (message.type === 'ORDER_SAVED') {
         queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
 
-        const order = message.order || message.payload;
-        if (isAuthenticated && apiRepository && userId && order) {
-          syncQueue.add({ type: 'upsert', order: { ...order, userId } });
+        if (isAuthenticated && apiRepository && userId) {
+          syncQueue.add({ type: 'upsert', order: { ...message.order, userId } });
         }
       }
     };
