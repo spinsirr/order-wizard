@@ -68,6 +68,7 @@ function buildSummary(orders: Order[]) {
 
 function orderRow(order: Order) {
   return {
+    'Image URL': order.productImage ?? '',
     'Order Number': order.orderNumber,
     'Product Name': order.productName,
     'Order Date': order.orderDate,
@@ -75,6 +76,32 @@ function orderRow(order: Order) {
     Status: readableStatus(order.status),
     Note: order.note ?? '',
   };
+}
+
+// --- Shared image helper ---
+
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    // Use smaller thumbnail size
+    const thumbUrl = url.replace(/\._[A-Z]{2}_[A-Z]{2}\d+_\./, '._AC_SL200_.');
+    const response = await fetch(thumbUrl);
+    const blob = await response.blob();
+    return await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null as unknown as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAllImages(orders: Order[]): Promise<(string | null)[]> {
+  const results = await Promise.allSettled(
+    orders.map((o) => (o.productImage ? fetchImageAsBase64(o.productImage) : Promise.resolve(null))),
+  );
+  return results.map((r) => (r.status === 'fulfilled' ? r.value : null));
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -98,17 +125,17 @@ export function exportOrdersToCSV(orders: Order[]): void {
 
   const summaryRows = [
     {},
-    { 'Order Number': '--- Summary ---' },
-    { 'Order Number': 'Total Orders', 'Product Name': String(summary.total) },
+    { 'Image URL': '--- Summary ---' },
+    { 'Image URL': 'Total Orders', 'Order Number': String(summary.total) },
     {
-      'Order Number': 'Total Spent',
-      'Product Name': `$${summary.totalValue.toFixed(2)}`,
+      'Image URL': 'Total Spent',
+      'Order Number': `$${summary.totalValue.toFixed(2)}`,
     },
     {},
-    { 'Order Number': '--- By Status ---' },
+    { 'Image URL': '--- By Status ---' },
     ...Object.entries(summary.statusCounts).map(([label, count]) => ({
-      'Order Number': label,
-      'Product Name': String(count),
+      'Image URL': label,
+      'Order Number': String(count),
     })),
   ];
 
@@ -122,8 +149,12 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Orders');
 
+  // Fetch all images in parallel
+  const images = await fetchAllImages(orders);
+
   // Define columns
   const columns = [
+    { header: 'Product Image', key: 'productImage', width: 15 },
     { header: 'Order Number', key: 'orderNumber', width: 22 },
     { header: 'Product Name', key: 'productName', width: 44 },
     { header: 'Order Date', key: 'orderDate', width: 18 },
@@ -154,8 +185,10 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
   };
 
   // Add data rows
-  for (const order of orders) {
+  for (let i = 0; i < orders.length; i++) {
+    const order = orders[i];
     const row = sheet.addRow({
+      productImage: '',
       orderNumber: order.orderNumber,
       productName: order.productName,
       orderDate: order.orderDate,
@@ -163,6 +196,22 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
       status: readableStatus(order.status),
       note: order.note ?? '',
     });
+
+    // Set row height for images
+    row.height = 60;
+
+    // Embed image if available
+    const base64 = images[i];
+    if (base64) {
+      const imageId = workbook.addImage({
+        base64,
+        extension: 'jpeg',
+      });
+      sheet.addImage(imageId, {
+        tl: { col: 0, row: row.number - 1 },
+        ext: { width: 80, height: 56 },
+      });
+    }
 
     // Color-code the status cell
     const category = statusFillCategory(order.status);
@@ -230,10 +279,13 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
 
 // --- PDF ---
 
-function exportOrdersToPDF(orders: Order[]): void {
+async function exportOrdersToPDF(orders: Order[]): Promise<void> {
   const doc = new jsPDF({ orientation: 'landscape' });
   const summary = buildSummary(orders);
   const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Fetch all images in parallel
+  const images = await fetchAllImages(orders);
 
   // Header
   doc.setFontSize(18);
@@ -263,6 +315,7 @@ function exportOrdersToPDF(orders: Order[]): void {
 
   // Orders table
   const rows = orders.map((o) => [
+    '', // image placeholder
     o.orderNumber,
     o.productName,
     o.orderDate,
@@ -273,23 +326,32 @@ function exportOrdersToPDF(orders: Order[]): void {
 
   autoTable(doc, {
     startY: 33,
-    head: [['Order #', 'Product', 'Date', 'Price', 'Status', 'Note']],
+    head: [['Image', 'Order #', 'Product', 'Date', 'Price', 'Status', 'Note']],
     body: rows,
     headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: 'bold' },
-    styles: { fontSize: 8, cellPadding: 3 },
+    styles: { fontSize: 8, cellPadding: 3, minCellHeight: 18 },
     columnStyles: {
-      0: { cellWidth: 35 },
-      1: { cellWidth: 80 },
-      4: { cellWidth: 28 },
+      0: { cellWidth: 20 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 70 },
+      5: { cellWidth: 28 },
     },
     didParseCell(data) {
-      if (data.section === 'body' && data.column.index === 4) {
+      if (data.section === 'body' && data.column.index === 5) {
         const status = orders[data.row.index]?.status;
         if (status) {
           const c = STATUS_COLORS[status];
           data.cell.styles.fillColor = [c.r, c.g, c.b];
           data.cell.styles.textColor =
             status === 'commented' ? [0, 0, 0] : [255, 255, 255];
+        }
+      }
+    },
+    didDrawCell(data) {
+      if (data.section === 'body' && data.column.index === 0) {
+        const base64 = images[data.row.index];
+        if (base64) {
+          doc.addImage(base64, 'JPEG', data.cell.x + 1, data.cell.y + 1, 14, 14);
         }
       }
     },
@@ -363,16 +425,16 @@ function exportOrdersToPDF(orders: Order[]): void {
 
 // --- Dispatcher ---
 
-export function exportOrders(orders: Order[], format: ExportFormat): void {
+export async function exportOrders(orders: Order[], format: ExportFormat): Promise<void> {
   switch (format) {
     case 'csv':
       exportOrdersToCSV(orders);
       break;
     case 'xlsx':
-      exportOrdersToXLSX(orders);
+      await exportOrdersToXLSX(orders);
       break;
     case 'pdf':
-      exportOrdersToPDF(orders);
+      await exportOrdersToPDF(orders);
       break;
   }
 }
