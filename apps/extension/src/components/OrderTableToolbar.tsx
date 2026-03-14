@@ -1,6 +1,24 @@
-import { CheckCircle2, Circle, ClipboardList, Download, Minus, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  ClipboardList,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Minus,
+  Trash2,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib';
+import type { ExportFormat } from '@/utils/orderExport';
 import { Button } from './ui/button';
+
+const EXPORT_OPTIONS: { format: ExportFormat; label: string; icon: typeof FileText }[] = [
+  { format: 'csv', label: 'CSV', icon: FileText },
+  { format: 'xlsx', label: 'Excel (.xlsx)', icon: FileSpreadsheet },
+  { format: 'pdf', label: 'PDF', icon: FileText },
+];
 
 interface OrderTableToolbarProps {
   displayCount: number;
@@ -9,7 +27,7 @@ interface OrderTableToolbarProps {
   someSelected: boolean;
   onToggleSelectAll: (checked: boolean) => void;
   onDeleteSelected: () => void;
-  onExport: () => void;
+  onExport: (format: ExportFormat) => void;
 }
 
 export function OrderTableToolbar({
@@ -22,6 +40,19 @@ export function OrderTableToolbar({
   onExport,
 }: OrderTableToolbarProps) {
   const hasSelection = selectedCount > 0;
+  const [exportOpen, setExportOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [exportOpen]);
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -78,10 +109,34 @@ export function OrderTableToolbar({
           <Trash2 className="h-4 w-4" aria-hidden="true" />
           Delete Selected
         </Button>
-        <Button onClick={onExport} size="sm" variant="tonal">
-          <Download className="h-4 w-4" aria-hidden="true" />
-          Export CSV
-        </Button>
+        <div className="relative" ref={dropdownRef}>
+          <Button onClick={() => setExportOpen((prev) => !prev)} size="sm" variant="tonal">
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Export
+            <ChevronDown
+              className={cn('h-3.5 w-3.5 transition-transform', exportOpen && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </Button>
+          {exportOpen && (
+            <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface-container shadow-lg">
+              {EXPORT_OPTIONS.map(({ format, label, icon: Icon }) => (
+                <button
+                  key={format}
+                  type="button"
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
+                  onClick={() => {
+                    onExport(format);
+                    setExportOpen(false);
+                  }}
+                >
+                  <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

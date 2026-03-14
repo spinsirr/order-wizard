@@ -1,13 +1,14 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useOrders, useUpdateOrderStatus, useDeleteOrders } from '@/hooks/useOrders';
-import { filterAndSortOrders, exportOrdersToCSV } from '@/utils';
-import type { StatusFilter, OrderSortOption } from '@/utils';
+import { useEffect, useMemo, useState } from 'react';
+import { useDeleteOrders, useOrders, useUpdateOrderStatus } from '@/hooks/useOrders';
 import type { OrderStatus } from '@/types';
+import type { OrderSortOption, StatusFilter } from '@/utils';
+import { exportOrders, filterAndSortOrders } from '@/utils';
+import type { ExportFormat } from '@/utils/orderExport';
+import { type ConfirmData, DeleteConfirmModal } from './DeleteConfirmModal';
 import { OrderCard } from './OrderCard';
-import { OrderTableToolbar } from './OrderTableToolbar';
+import { OrderTableEmpty, OrderTableLoading, OrderTableNoResults } from './OrderEmptyStates';
 import { OrderTableFilters } from './OrderTableFilters';
-import { DeleteConfirmModal, type ConfirmData } from './DeleteConfirmModal';
-import { OrderTableLoading, OrderTableEmpty, OrderTableNoResults } from './OrderEmptyStates';
+import { OrderTableToolbar } from './OrderTableToolbar';
 
 export function OrderTable() {
   // TanStack Query hooks
@@ -26,7 +27,7 @@ export function OrderTable() {
   // Derived state
   const displayOrders = useMemo(
     () => filterAndSortOrders(orders, searchQuery, statusFilter, sortOption),
-    [orders, searchQuery, statusFilter, sortOption]
+    [orders, searchQuery, statusFilter, sortOption],
   );
 
   // Clean up selected IDs when orders change (remove IDs that no longer exist)
@@ -95,8 +96,8 @@ export function OrderTable() {
     setConfirmData(null);
   };
 
-  const handleExport = () => {
-    exportOrdersToCSV(displayOrders);
+  const handleExport = (format: ExportFormat) => {
+    exportOrders(displayOrders, format);
   };
 
   const handleImageError = (orderId: string) => {
