@@ -4,7 +4,6 @@ import { type ScrapedOrderData, ScrapedOrderDataSchema } from '@/schemas';
  * Scrape order data from Amazon order card
  */
 export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
-  console.log('🔍 Scraping order card:', orderCard);
 
   // Extract order number - it's in two spans within .yohtmlc-order-id
   const orderIdContainer = orderCard.querySelector('.yohtmlc-order-id');
@@ -14,12 +13,10 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
     // Second span contains the actual order number
     orderNumber = orderIdSpans[1].textContent?.trim() || '';
   }
-  console.log('📋 Order Number:', orderNumber);
 
   // Extract product name
   const productNameElement = orderCard.querySelector('.yohtmlc-product-title a');
   const productName = productNameElement?.textContent?.trim() || '';
-  console.log('📦 Product Name:', productName);
 
   // Extract order date - find the column with "Order placed" label
   let orderDate = '';
@@ -35,7 +32,6 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
       }
     }
   }
-  console.log('📅 Order Date:', orderDate);
 
   // Extract product image - prefer high-res version
   const productImageElement = orderCard.querySelector('.product-image img') as HTMLImageElement;
@@ -45,7 +41,6 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
   if (productImage) {
     productImage = productImage.replace(/\._[^.]+_\.(?=jpg|png|gif|webp|jpeg)/i, '._AC_SL1500_.');
   }
-  console.log('🖼️ Product Image:', productImage);
 
   // Extract price - find the column with "Total" label
   let price = '';
@@ -60,7 +55,6 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
       }
     }
   }
-  console.log('💰 Price:', price);
 
   const rawData = {
     orderNumber,
@@ -70,7 +64,6 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
     price,
   };
 
-  console.log('📊 Raw scraped data:', rawData);
 
   // Validate with Zod schema - will throw if invalid
   return ScrapedOrderDataSchema.parse(rawData);

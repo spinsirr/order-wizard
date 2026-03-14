@@ -16,6 +16,7 @@ export default defineContentScript({
     '*://*.amazon.com/gp/your-account/order-history*',
     '*://*.amazon.com/your-orders/orders*',
   ],
+  runAt: 'document_idle',
   main() {
     initializeErrorHandlers();
 

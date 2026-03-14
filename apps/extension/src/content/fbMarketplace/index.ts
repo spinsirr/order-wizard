@@ -10,8 +10,7 @@ import {
 import { showPreviewModal } from './previewModal';
 import { getTemplate, applyTemplate } from '@/lib';
 import type { FBListingData, ProductDetails } from '@/types';
-
-const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
+import { FB_PENDING_LISTING_KEY } from '@/constants';
 
 async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Promise<void> {
   showFBButtonLoading(button);

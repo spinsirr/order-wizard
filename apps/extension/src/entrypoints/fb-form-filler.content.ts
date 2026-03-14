@@ -1,8 +1,7 @@
 import { initializeErrorHandlers } from '@/lib';
 import { fillFBForm } from '@/content/fbFormFiller/formFiller';
 import type { FBListingData } from '@/types';
-
-const FB_PENDING_LISTING_KEY = 'fb_pending_listing';
+import { FB_PENDING_LISTING_KEY } from '@/constants';
 
 export default defineContentScript({
   matches: ['*://*.facebook.com/marketplace/create/*'],

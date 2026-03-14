@@ -1,7 +1,3 @@
-import ExcelJS from 'exceljs';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import Papa from 'papaparse';
 import type { Order, OrderStatus } from '@/types';
 import { ORDER_STATUS_LABELS } from '@/types';
 
@@ -89,7 +85,7 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
     return await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null as unknown as string);
+      reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
   } catch {
@@ -119,7 +115,8 @@ function dateSuffix(): string {
 
 // --- CSV ---
 
-export function exportOrdersToCSV(orders: Order[]): void {
+export async function exportOrdersToCSV(orders: Order[]): Promise<void> {
+  const Papa = (await import('papaparse')).default;
   const rows = orders.map(orderRow);
   const summary = buildSummary(orders);
 
@@ -146,6 +143,7 @@ export function exportOrdersToCSV(orders: Order[]): void {
 // --- Excel (exceljs) ---
 
 async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
+  const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Orders');
 
@@ -280,6 +278,8 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
 // --- PDF ---
 
 async function exportOrdersToPDF(orders: Order[]): Promise<void> {
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF({ orientation: 'landscape' });
   const summary = buildSummary(orders);
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -428,7 +428,7 @@ async function exportOrdersToPDF(orders: Order[]): Promise<void> {
 export async function exportOrders(orders: Order[], format: ExportFormat): Promise<void> {
   switch (format) {
     case 'csv':
-      exportOrdersToCSV(orders);
+      await exportOrdersToCSV(orders);
       break;
     case 'xlsx':
       await exportOrdersToXLSX(orders);

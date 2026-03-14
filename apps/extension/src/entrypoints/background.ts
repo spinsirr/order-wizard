@@ -28,8 +28,14 @@ export default defineBackground(() => {
     return false;
   });
 
+  const ALLOWED_FETCH_ORIGINS = ['https://www.amazon.com', 'https://www.amazon.co.uk', 'https://www.amazon.ca', 'https://www.amazon.de', 'https://www.amazon.co.jp'];
+
   async function handleFetchUrl(url: string): Promise<{ html?: string; error?: string }> {
     try {
+      const parsed = new URL(url);
+      if (!ALLOWED_FETCH_ORIGINS.includes(parsed.origin)) {
+        return { error: `Blocked: ${parsed.origin} is not an allowed origin` };
+      }
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) {
         return { error: `Failed to fetch: ${response.status}` };

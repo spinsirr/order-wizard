@@ -97,7 +97,8 @@ class SyncQueue {
 
       // Schedule retry for remaining items
       if (remaining.length > 0) {
-        const delay = RETRY_DELAYS[Math.min(remaining[0].retryCount - 1, RETRY_DELAYS.length - 1)];
+        const minRetryCount = Math.min(...remaining.map((item) => item.retryCount));
+        const delay = RETRY_DELAYS[Math.min(minRetryCount - 1, RETRY_DELAYS.length - 1)];
         console.log(`[SyncQueue] Retrying ${remaining.length} items in ${delay}ms`);
         setTimeout(() => this.process(), delay);
       }

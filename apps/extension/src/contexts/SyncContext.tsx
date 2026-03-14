@@ -42,8 +42,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const cloud = cloudMap.get(orderNumber);
 
       if (local && cloud) {
-        const localTime = local.updatedAt || local.createdAt || '';
-        const cloudTime = cloud.updatedAt || cloud.createdAt || '';
+        const localTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
+        const cloudTime = new Date(cloud.updatedAt || cloud.createdAt || 0).getTime();
 
         if (localTime > cloudTime) {
           syncQueue.add({ type: 'upsert', order: { ...local, userId: uid } });
@@ -95,7 +95,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       hasSyncedRef.current = false;
       setLastSyncedAt(null);
     }
-  }, [isAuthenticated, userId, syncMutation]);
+  }, [isAuthenticated, userId, syncMutation.mutate]);
 
   // Unified ORDER_SAVED listener: invalidate cache + queue for sync
   useEffect(() => {

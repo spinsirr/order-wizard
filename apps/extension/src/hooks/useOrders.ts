@@ -87,7 +87,7 @@ export function useDeleteOrders() {
         if (isAuthenticated && user) {
           const order = await localRepository.getById(id);
           if (order) {
-            syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
+            syncQueue.add({ type: 'delete', orderId: order.id, orderNumber: order.orderNumber });
           }
         }
       }

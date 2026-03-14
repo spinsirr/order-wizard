@@ -91,13 +91,30 @@ export function setupMutationObserver(onSave: SaveHandler): MutationObserver {
   let debounceTimer: ReturnType<typeof setTimeout>;
   const observer = new MutationObserver(() => {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => injectSaveButtons(onSave), 100);
+    debounceTimer = setTimeout(() => injectSaveButtons(onSave), 200);
   });
 
   observer.observe(document.body, {
     childList: true,
     subtree: true,
   });
+
+  // Retry injection for cards whose inner content hasn't rendered yet.
+  // Amazon renders card shells before filling in child sections,
+  // so the initial pass (and early mutations) can miss the inject target.
+  let retries = 0;
+  const maxRetries = 10;
+  const retryInterval = setInterval(() => {
+    retries++;
+    const uninjected = document.querySelectorAll(
+      '.order-card.js-order-card:not(:has(.save-order-btn))',
+    );
+    if (uninjected.length === 0 || retries >= maxRetries) {
+      clearInterval(retryInterval);
+      return;
+    }
+    injectSaveButtons(onSave);
+  }, 500);
 
   return observer;
 }
