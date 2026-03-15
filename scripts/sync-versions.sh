@@ -12,11 +12,10 @@ echo "Syncing version $VERSION to all packages..."
 jq --arg v "$VERSION" '.version = $v' "$ROOT_DIR/apps/extension/package.json" > tmp.json
 mv tmp.json "$ROOT_DIR/apps/extension/package.json"
 
-# Sync to extension manifest.json
-jq --arg v "$VERSION" '.version = $v' "$ROOT_DIR/apps/extension/public/manifest.json" > tmp.json
-mv tmp.json "$ROOT_DIR/apps/extension/public/manifest.json"
+# Sync to wxt.config.ts (manifest version)
+sed -i '' "s/version: '.*'/version: '$VERSION'/" "$ROOT_DIR/apps/extension/wxt.config.ts"
 
 # Sync to server Cargo.toml
-sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$ROOT_DIR/apps/server/Cargo.toml"
+sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$ROOT_DIR/apps/server/Cargo.toml"
 
 echo "Done."

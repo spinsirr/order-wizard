@@ -17,12 +17,9 @@ if git diff --cached --name-only | grep -q "^package.json$"; then
   mv tmp.json "$ROOT_DIR/apps/extension/package.json"
   git add "$ROOT_DIR/apps/extension/package.json"
 
-  # Sync to extension manifest.json (if exists)
-  if [ -f "$ROOT_DIR/apps/extension/public/manifest.json" ]; then
-    jq --arg v "$VERSION" '.version = $v' "$ROOT_DIR/apps/extension/public/manifest.json" > tmp.json
-    mv tmp.json "$ROOT_DIR/apps/extension/public/manifest.json"
-    git add "$ROOT_DIR/apps/extension/public/manifest.json"
-  fi
+  # Sync to wxt.config.ts (manifest version)
+  sed -i '' "s/version: '.*'/version: '$VERSION'/" "$ROOT_DIR/apps/extension/wxt.config.ts"
+  git add "$ROOT_DIR/apps/extension/wxt.config.ts"
 
   # Sync to server Cargo.toml (macOS-compatible sed)
   sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$ROOT_DIR/apps/server/Cargo.toml"
