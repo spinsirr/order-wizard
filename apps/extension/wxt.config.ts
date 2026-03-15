@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: 'Amazon Order Wizard',
     key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn1If74i2NtupX1+aGXa5dNFW1jvArO6WL7xgNFkLp7QWkDmbLntsMWPIVryUHIWs/Bg8rDpAshUg5+OEz7LH96Sbj8vzCw7kfqYUn6gykcfsgnnLXKywV9Wc5PrjYKlscIOlRx5louTVHx61w2FDhkuzLE2x+6iajGTtaRyi2vcxfaMrcn5C3tZfcOBB+aaOhF+JyvWPJauIqe29Z/XKN53QFOwDjtOV1a+N/p59UtKzYkbUJmCj1dMs46mBJeFJVosghjMvPQk70OL3g68xJJWSqH7dRyYjWX+ONM8W2WU/PMC+MKt+GJqXnMFKXAyQMasQhHsqJB41/B0dYiNnGwIDAQAB',
-    version: '1.0.4',
+    version: '1.0.7',
     description: 'Manage and track your Amazon orders',
     permissions: ['storage', 'activeTab', 'sidePanel', 'identity'],
     host_permissions: [
