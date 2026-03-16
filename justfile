@@ -70,6 +70,13 @@ clean:
 install:
     cd apps/extension && bun install
 
+# Bump version across all packages (single source of truth: root package.json)
+bump version:
+    jq --arg v "{{version}}" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+    jq --arg v "{{version}}" '.version = $v' apps/extension/package.json > tmp.json && mv tmp.json apps/extension/package.json
+    sed -i '' 's/^version = ".*"/version = "{{version}}"/' apps/server/Cargo.toml
+    @echo "Bumped all packages to {{version}}"
+
 # Setup git hooks
 setup:
     git config core.hooksPath .githooks

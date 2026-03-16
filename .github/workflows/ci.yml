@@ -16,6 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check version consistency
+        working-directory: .
+        run: |
+          ROOT_VERSION=$(jq -r '.version' package.json)
+          EXT_VERSION=$(jq -r '.version' apps/extension/package.json)
+          SERVER_VERSION=$(grep '^version = ' apps/server/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+
+          echo "Root: $ROOT_VERSION, Extension: $EXT_VERSION, Server: $SERVER_VERSION"
+
+          if [ "$ROOT_VERSION" != "$EXT_VERSION" ] || [ "$ROOT_VERSION" != "$SERVER_VERSION" ]; then
+            echo "::error::Version mismatch! Root=$ROOT_VERSION, Extension=$EXT_VERSION, Server=$SERVER_VERSION. Run 'just bump <version>' to sync."
+            exit 1
+          fi
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
