@@ -99,7 +99,7 @@ export function OrderCard({
 
   useEffect(() => {
     setDraftNote(order.note ?? '');
-  }, [order.id, order.note]);
+  }, [order.note]);
 
   const handleNoteChange = (note: string) => {
     setDraftNote(note);
