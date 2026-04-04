@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { localRepository } from '@/config';
 import { syncQueue } from '@/lib/syncQueue';
@@ -64,6 +65,53 @@ export function useUpdateOrderStatus() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+/**
+ * Update order note
+ */
+export function useUpdateOrderNote() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated, user } = useAuth();
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => {
+      const run = async () => {
+        const updatedAt = new Date().toISOString();
+        const nextNote = note.trim() ? note : undefined;
+
+        await localRepository.update(id, { note: nextNote, updatedAt });
+
+        if (isAuthenticated && user) {
+          const order = await localRepository.getById(id);
+          if (order) {
+            syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
+          }
+        }
+      };
+
+      const queuedRun = writeQueueRef.current.catch(() => undefined).then(run);
+      writeQueueRef.current = queuedRun;
+      return queuedRun;
+    },
+    onMutate: async ({ id, note }) => {
+      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
+      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
+      const nextNote = note.trim() ? note : undefined;
+
+      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
+        old?.map((order) => (order.id === id ? { ...order, note: nextNote } : order))
+      );
+
+      return { previousOrders };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousOrders) {
+        queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      }
     },
   });
 }

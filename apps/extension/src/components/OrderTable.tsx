@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useDeleteOrders, useOrders, useUpdateOrderStatus } from '@/hooks/useOrders';
+import {
+  useDeleteOrders,
+  useOrders,
+  useUpdateOrderNote,
+  useUpdateOrderStatus,
+} from '@/hooks/useOrders';
 import type { OrderStatus } from '@/types';
 import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
 import { filterAndSortOrders } from '@/utils/orderFilters';
@@ -15,6 +20,7 @@ export function OrderTable() {
   // TanStack Query hooks
   const { data: orders = [], isLoading } = useOrders();
   const updateStatusMutation = useUpdateOrderStatus();
+  const updateNoteMutation = useUpdateOrderNote();
   const deleteOrdersMutation = useDeleteOrders();
 
   // UI state (local - no need for global store)
@@ -114,6 +120,10 @@ export function OrderTable() {
     updateStatusMutation.mutate({ id: orderId, status });
   };
 
+  const handleNoteSave = (orderId: string, note: string) => {
+    updateNoteMutation.mutate({ id: orderId, note });
+  };
+
   if (isLoading) {
     return <OrderTableLoading />;
   }
@@ -158,6 +168,7 @@ export function OrderTable() {
                 hasImageError={imageFailures.has(order.id)}
                 onToggleSelect={toggleSelect}
                 onStatusChange={handleStatusChange}
+                onNoteSave={handleNoteSave}
                 onDelete={handleDeleteSingle}
                 onImageError={handleImageError}
               />
