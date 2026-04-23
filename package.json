@@ -1,6 +1,6 @@
 {
   "name": "order-wizard",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "packageManager": "bun@1.1.38",
   "private": true,
   "workspaces": [
