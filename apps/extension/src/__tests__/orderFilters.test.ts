@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  searchOrders,
   sortOrders,
   filterOrdersByStatus,
   filterAndSortOrders,
@@ -152,5 +153,19 @@ describe('filterAndSortOrders', () => {
   it('returns all when no filters applied', () => {
     const result = filterAndSortOrders(orders, '', 'all', 'created-desc');
     expect(result).toHaveLength(3);
+  });
+});
+
+describe('searchOrders', () => {
+  it('matches note content', () => {
+    const orders = [
+      makeOrder({ id: '1', note: 'Customer asked for fragile packaging' }),
+      makeOrder({ id: '2', note: 'Ship with signature required' }),
+    ];
+
+    const result = searchOrders(orders, 'fragile');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('1');
   });
 });

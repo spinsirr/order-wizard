@@ -69,6 +69,45 @@ export function useUpdateOrderStatus() {
 }
 
 /**
+ * Update order note
+ */
+export function useUpdateOrderNote() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated, user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const updatedAt = new Date().toISOString();
+      const nextNote = note.trim() ? note : undefined;
+
+      await localRepository.update(id, { note: nextNote, updatedAt });
+
+      if (isAuthenticated && user) {
+        const order = await localRepository.getById(id);
+        if (order) {
+          syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
+        }
+      }
+    },
+    onMutate: async ({ id, note }) => {
+      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
+      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
+      const nextNote = note.trim() ? note : undefined;
+      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
+        old?.map((order) => (order.id === id ? { ...order, note: nextNote } : order))
+      );
+      return { previousOrders };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+    },
+  });
+}
+
+/**
  * Delete orders (unified soft delete)
  */
 export function useDeleteOrders() {
