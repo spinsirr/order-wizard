@@ -1,6 +1,11 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useDeleteOrders, useOrders, useUpdateOrderStatus } from '@/hooks/useOrders';
+import {
+  useDeleteOrders,
+  useOrders,
+  useUpdateOrderNote,
+  useUpdateOrderStatus,
+} from '@/hooks/useOrders';
 import type { OrderStatus } from '@/types';
 import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
 import { filterAndSortOrders } from '@/utils/orderFilters';
@@ -16,8 +21,10 @@ export function OrderTable() {
   // TanStack Query hooks
   const { data: orders = [], isLoading } = useOrders();
   const updateStatusMutation = useUpdateOrderStatus();
+  const updateNoteMutation = useUpdateOrderNote();
   const deleteOrdersMutation = useDeleteOrders();
   const { mutate: mutateStatus } = updateStatusMutation;
+  const { mutate: mutateNote } = updateNoteMutation;
   const { mutateAsync: mutateDelete, isPending: isDeleting } = deleteOrdersMutation;
 
   // UI state (local - no need for global store)
@@ -132,6 +139,13 @@ export function OrderTable() {
     [mutateStatus],
   );
 
+  const handleNoteSave = useCallback(
+    (orderId: string, note: string) => {
+      mutateNote({ id: orderId, note });
+    },
+    [mutateNote],
+  );
+
   const handleClearSearch = useCallback(() => setSearchQuery(''), []);
 
   const scrollParentRef = useRef<HTMLDivElement>(null);
@@ -211,6 +225,7 @@ export function OrderTable() {
                     hasImageError={imageFailures.has(order.id)}
                     onToggleSelect={toggleSelect}
                     onStatusChange={handleStatusChange}
+                    onNoteSave={handleNoteSave}
                     onDelete={handleDeleteSingle}
                     onImageError={handleImageError}
                   />

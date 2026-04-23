@@ -9,7 +9,7 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
 import { cn } from '@/lib';
 import { Card, CardTitle } from './ui/card';
@@ -74,12 +74,15 @@ const statusConfig: Record<
 const STATUS_SEQUENCE = Object.values(OrderStatus);
 const CARD_CONTENT_WIDTH = 'mx-auto w-full max-w-none';
 
+const NOTE_DEBOUNCE_MS = 400;
+
 interface OrderCardProps {
   order: Order;
   isSelected: boolean;
   hasImageError: boolean;
   onToggleSelect: (orderId: string) => void;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
+  onNoteSave: (orderId: string, note: string) => void;
   onDelete: (orderId: string) => void;
   onImageError: (orderId: string) => void;
 }
@@ -90,9 +93,39 @@ function OrderCardImpl({
   hasImageError,
   onToggleSelect,
   onStatusChange,
+  onNoteSave,
   onDelete,
   onImageError,
 }: OrderCardProps) {
+  const savedNote = order.note ?? '';
+  const [draftNote, setDraftNote] = useState(savedNote);
+  const lastSavedRef = useRef(savedNote);
+
+  // Reconcile local draft when the order's note changes from outside (e.g. sync).
+  // Only overwrite if we've saved everything we typed, to avoid clobbering an in-flight edit.
+  useEffect(() => {
+    if (draftNote === lastSavedRef.current) {
+      lastSavedRef.current = savedNote;
+      setDraftNote(savedNote);
+    }
+  }, [savedNote, draftNote]);
+
+  // Debounced save: fires 400 ms after the last keystroke.
+  useEffect(() => {
+    if (draftNote === lastSavedRef.current) return;
+    const timer = setTimeout(() => {
+      lastSavedRef.current = draftNote;
+      onNoteSave(order.id, draftNote);
+    }, NOTE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draftNote, order.id, onNoteSave]);
+
+  const flushNote = () => {
+    if (draftNote === lastSavedRef.current) return;
+    lastSavedRef.current = draftNote;
+    onNoteSave(order.id, draftNote);
+  };
+
   return (
     <Card
       elevation={isSelected ? 'high' : 'medium'}
@@ -221,29 +254,41 @@ function OrderCardImpl({
             <span className="text-[11px] text-muted-foreground/80">
               Placed {order.orderDate}
             </span>
-            <div className="ml-auto flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const sanitized = order.orderNumber.replace(/\s+/g, '');
-                  const url = `https://www.amazon.com/gp/css/order-details?orderID=${encodeURIComponent(sanitized)}`;
-                  window.open(url, '_blank', 'noopener');
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/15"
-                aria-label="Track order"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(order.id)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-destructive/30 text-destructive transition hover:bg-destructive/10"
-                aria-label="Remove order"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
           </div>
+        </div>
+      </div>
+      <div className={cn(CARD_CONTENT_WIDTH, 'px-6 pb-4')}>
+        <div className="flex min-w-0 items-center gap-2">
+          <input
+            id={`order-note-${order.id}`}
+            type="text"
+            value={draftNote}
+            onChange={(event) => setDraftNote(event.target.value)}
+            onBlur={flushNote}
+            placeholder="Add a note..."
+            autoComplete="off"
+            className="min-w-0 flex-1 rounded-full border border-border/70 bg-muted/35 px-4 py-2.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] outline-none transition placeholder:text-muted-foreground/70 focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const sanitized = order.orderNumber.replace(/\s+/g, '');
+              const url = `https://www.amazon.com/gp/css/order-details?orderID=${encodeURIComponent(sanitized)}`;
+              window.open(url, '_blank', 'noopener');
+            }}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/15"
+            aria-label="Track order"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(order.id)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-destructive/30 text-destructive transition hover:bg-destructive/10"
+            aria-label="Remove order"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       </div>
     </Card>
