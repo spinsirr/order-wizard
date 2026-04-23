@@ -9,7 +9,7 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useState, type KeyboardEvent } from 'react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
 import { cn } from '@/lib';
 import { Card, CardTitle } from './ui/card';
@@ -74,8 +74,6 @@ const statusConfig: Record<
 const STATUS_SEQUENCE = Object.values(OrderStatus);
 const CARD_CONTENT_WIDTH = 'mx-auto w-full max-w-none';
 
-const NOTE_DEBOUNCE_MS = 400;
-
 interface OrderCardProps {
   order: Order;
   isSelected: boolean;
@@ -99,31 +97,28 @@ function OrderCardImpl({
 }: OrderCardProps) {
   const savedNote = order.note ?? '';
   const [draftNote, setDraftNote] = useState(savedNote);
-  const lastSavedRef = useRef(savedNote);
+  const isDirty = draftNote !== savedNote;
 
   // Reconcile local draft when the order's note changes from outside (e.g. sync).
-  // Only overwrite if we've saved everything we typed, to avoid clobbering an in-flight edit.
+  // Skip while the user has an uncommitted draft so we don't clobber their typing.
   useEffect(() => {
-    if (draftNote === lastSavedRef.current) {
-      lastSavedRef.current = savedNote;
-      setDraftNote(savedNote);
-    }
-  }, [savedNote, draftNote]);
+    if (!isDirty) setDraftNote(savedNote);
+  }, [savedNote, isDirty]);
 
-  // Debounced save: fires 400 ms after the last keystroke.
-  useEffect(() => {
-    if (draftNote === lastSavedRef.current) return;
-    const timer = setTimeout(() => {
-      lastSavedRef.current = draftNote;
-      onNoteSave(order.id, draftNote);
-    }, NOTE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [draftNote, order.id, onNoteSave]);
-
-  const flushNote = () => {
-    if (draftNote === lastSavedRef.current) return;
-    lastSavedRef.current = draftNote;
+  const commitNote = () => {
+    if (!isDirty) return;
     onNoteSave(order.id, draftNote);
+  };
+
+  const handleNoteKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitNote();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setDraftNote(savedNote);
+      event.currentTarget.blur();
+    }
   };
 
   return (
@@ -264,11 +259,26 @@ function OrderCardImpl({
             type="text"
             value={draftNote}
             onChange={(event) => setDraftNote(event.target.value)}
-            onBlur={flushNote}
+            onKeyDown={handleNoteKeyDown}
             placeholder="Add a note..."
             autoComplete="off"
-            className="min-w-0 flex-1 rounded-full border border-border/70 bg-muted/35 px-4 py-2.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] outline-none transition placeholder:text-muted-foreground/70 focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+            title="Press Enter to save · Esc to discard"
+            aria-describedby={isDirty ? `order-note-${order.id}-hint` : undefined}
+            className={cn(
+              'min-w-0 flex-1 rounded-full border bg-muted/35 px-4 py-2.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] outline-none transition placeholder:text-muted-foreground/70 focus:ring-4 focus:ring-primary/10',
+              isDirty
+                ? 'border-primary/60 focus:border-primary'
+                : 'border-border/70 focus:border-primary/40',
+            )}
           />
+          {isDirty ? (
+            <span
+              id={`order-note-${order.id}-hint`}
+              className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline"
+            >
+              Enter to save · Esc to cancel
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={() => {
