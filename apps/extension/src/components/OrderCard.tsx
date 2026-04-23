@@ -9,6 +9,7 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
+import { memo } from 'react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
 import { cn } from '@/lib';
 import { Card, CardTitle } from './ui/card';
@@ -83,7 +84,7 @@ interface OrderCardProps {
   onImageError: (orderId: string) => void;
 }
 
-export function OrderCard({
+function OrderCardImpl({
   order,
   isSelected,
   hasImageError,
@@ -248,3 +249,5 @@ export function OrderCard({
     </Card>
   );
 }
+
+export const OrderCard = memo(OrderCardImpl);

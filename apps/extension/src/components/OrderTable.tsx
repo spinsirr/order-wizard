@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDeleteOrders, useOrders, useUpdateOrderStatus } from '@/hooks/useOrders';
 import type { OrderStatus } from '@/types';
 import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
@@ -16,6 +17,8 @@ export function OrderTable() {
   const { data: orders = [], isLoading } = useOrders();
   const updateStatusMutation = useUpdateOrderStatus();
   const deleteOrdersMutation = useDeleteOrders();
+  const { mutate: mutateStatus } = updateStatusMutation;
+  const { mutateAsync: mutateDelete, isPending: isDeleting } = deleteOrdersMutation;
 
   // UI state (local - no need for global store)
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,15 +28,17 @@ export function OrderTable() {
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());
 
-  // Derived state
+  // Keep the input responsive; defer the heavy filter/sort pass to a low-priority render.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const displayOrders = useMemo(
-    () => filterAndSortOrders(orders, searchQuery, statusFilter, sortOption),
-    [orders, searchQuery, statusFilter, sortOption],
+    () => filterAndSortOrders(orders, deferredSearchQuery, statusFilter, sortOption),
+    [orders, deferredSearchQuery, statusFilter, sortOption],
   );
 
-  // Clean up selected IDs when orders change (remove IDs that no longer exist)
+  // Prune selected IDs only when the underlying order set changes, not on every search keystroke.
   useEffect(() => {
-    const orderIds = new Set(displayOrders.map((o) => o.id));
+    const orderIds = new Set(orders.map((o) => o.id));
     setSelectedIds((previous) => {
       const stillValid = [...previous].filter((id) => orderIds.has(id));
       if (stillValid.length === previous.size) {
@@ -41,17 +46,20 @@ export function OrderTable() {
       }
       return new Set(stillValid);
     });
-  }, [displayOrders]);
+  }, [orders]);
 
   const selectedCount = selectedIds.size;
   const allSelected = displayOrders.length > 0 && selectedCount === displayOrders.length;
   const someSelected = selectedCount > 0 && selectedCount < displayOrders.length;
 
-  const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? new Set(displayOrders.map((order) => order.id)) : new Set<string>());
-  };
+  const toggleSelectAll = useCallback(
+    (checked: boolean) => {
+      setSelectedIds(checked ? new Set(displayOrders.map((order) => order.id)) : new Set<string>());
+    },
+    [displayOrders],
+  );
 
-  const toggleSelect = (orderId: string) => {
+  const toggleSelect = useCallback((orderId: string) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
       if (next.has(orderId)) {
@@ -61,27 +69,31 @@ export function OrderTable() {
       }
       return next;
     });
-  };
+  }, []);
 
-  const handleDeleteSelected = () => {
-    if (selectedCount === 0) return;
-    setConfirmData({
-      type: 'bulk',
-      orderIds: Array.from(selectedIds),
-      message: `Delete ${selectedCount} selected order${selectedCount === 1 ? '' : 's'}?`,
+  const handleDeleteSelected = useCallback(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const ids = Array.from(current);
+      setConfirmData({
+        type: 'bulk',
+        orderIds: ids,
+        message: `Delete ${ids.length} selected order${ids.length === 1 ? '' : 's'}?`,
+      });
+      return current;
     });
-  };
+  }, []);
 
-  const handleDeleteSingle = (orderId: string) => {
+  const handleDeleteSingle = useCallback((orderId: string) => {
     setConfirmData({ type: 'single', orderId, message: 'Delete this order?' });
-  };
+  }, []);
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = useCallback(async () => {
     if (!confirmData) return;
 
     const idsToDelete = confirmData.type === 'bulk' ? confirmData.orderIds : [confirmData.orderId];
 
-    await deleteOrdersMutation.mutateAsync(idsToDelete);
+    await mutateDelete(idsToDelete);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       for (const id of idsToDelete) {
@@ -90,29 +102,47 @@ export function OrderTable() {
       return next;
     });
     setConfirmData(null);
-  };
+  }, [confirmData, mutateDelete]);
 
-  const handleCancelDelete = () => {
-    if (deleteOrdersMutation.isPending) return;
+  const handleCancelDelete = useCallback(() => {
+    if (isDeleting) return;
     setConfirmData(null);
-  };
+  }, [isDeleting]);
 
-  const handleExport = (format: ExportFormat) => {
-    exportOrders(displayOrders, format);
-  };
+  const handleExport = useCallback(
+    (format: ExportFormat) => {
+      exportOrders(displayOrders, format);
+    },
+    [displayOrders],
+  );
 
-  const handleImageError = (orderId: string) => {
+  const handleImageError = useCallback((orderId: string) => {
     setImageFailures((previous) => {
       if (previous.has(orderId)) return previous;
       const next = new Set(previous);
       next.add(orderId);
       return next;
     });
-  };
+  }, []);
 
-  const handleStatusChange = (orderId: string, status: OrderStatus) => {
-    updateStatusMutation.mutate({ id: orderId, status });
-  };
+  const handleStatusChange = useCallback(
+    (orderId: string, status: OrderStatus) => {
+      mutateStatus({ id: orderId, status });
+    },
+    [mutateStatus],
+  );
+
+  const handleClearSearch = useCallback(() => setSearchQuery(''), []);
+
+  const scrollParentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: displayOrders.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => 220,
+    overscan: 6,
+    gap: 14,
+    getItemKey: (index) => displayOrders[index]?.id ?? index,
+  });
 
   if (isLoading) {
     return <OrderTableLoading />;
@@ -145,23 +175,48 @@ export function OrderTable() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4">
+      <div
+        ref={scrollParentRef}
+        className="flex-1 overflow-y-auto px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4"
+      >
         {displayOrders.length === 0 ? (
-          <OrderTableNoResults searchQuery={searchQuery} onClearSearch={() => setSearchQuery('')} />
+          <OrderTableNoResults searchQuery={deferredSearchQuery} onClearSearch={handleClearSearch} />
         ) : (
-          <div className="flex flex-col gap-3.5">
-            {displayOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                isSelected={selectedIds.has(order.id)}
-                hasImageError={imageFailures.has(order.id)}
-                onToggleSelect={toggleSelect}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDeleteSingle}
-                onImageError={handleImageError}
-              />
-            ))}
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: 'relative',
+              width: '100%',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const order = displayOrders[virtualRow.index];
+              if (!order) return null;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <OrderCard
+                    order={order}
+                    isSelected={selectedIds.has(order.id)}
+                    hasImageError={imageFailures.has(order.id)}
+                    onToggleSelect={toggleSelect}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDeleteSingle}
+                    onImageError={handleImageError}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -169,7 +224,7 @@ export function OrderTable() {
       {confirmData ? (
         <DeleteConfirmModal
           confirmData={confirmData}
-          isDeleting={deleteOrdersMutation.isPending}
+          isDeleting={isDeleting}
           onConfirm={() => void handleConfirmDelete()}
           onCancel={handleCancelDelete}
         />

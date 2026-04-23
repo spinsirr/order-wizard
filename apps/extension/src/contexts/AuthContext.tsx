@@ -58,12 +58,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     saveCurrentUserToStorage(newUser);
   }, []);
 
-  // Update API repository token when user changes
+  // Update API repository token when the access token actually changes.
+  const accessToken = user?.access_token ?? null;
   useEffect(() => {
     if (apiRepository) {
-      apiRepository.setAccessToken(user?.access_token ?? null);
+      apiRepository.setAccessToken(accessToken);
     }
-  }, [user]);
+  }, [accessToken]);
 
   // Refresh token using refresh_token grant
   const refreshAccessToken = useCallback(async (currentUser: AuthUser): Promise<AuthUser | null> => {
