@@ -49,6 +49,21 @@ export class LocalStorageRepository {
     await this.saveAllOrders(orders);
   }
 
+  async updateMany(ids: string[], updates: Partial<Order>): Promise<Order[]> {
+    if (ids.length === 0) return [];
+    const idSet = new Set(ids);
+    const orders = await this.getAllOrders();
+    const updated: Order[] = [];
+    const next = orders.map((order) => {
+      if (!idSet.has(order.id)) return order;
+      const merged = { ...order, ...updates };
+      updated.push(merged);
+      return merged;
+    });
+    await this.saveAllOrders(next);
+    return updated;
+  }
+
   async delete(id: string): Promise<void> {
     const orders = await this.getAllOrders();
     const filtered = orders.filter((order) => order.id !== id);

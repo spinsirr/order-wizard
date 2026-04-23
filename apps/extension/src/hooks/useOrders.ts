@@ -77,18 +77,15 @@ export function useDeleteOrders() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
       const now = new Date().toISOString();
 
-      // Soft delete locally (same for logged in or not)
-      for (const id of ids) {
-        await localRepository.update(id, { deletedAt: now, updatedAt: now });
+      // Single read-modify-write pass for the whole batch.
+      const updated = await localRepository.updateMany(ids, { deletedAt: now, updatedAt: now });
 
-        // Queue for cloud sync if authenticated
-        if (isAuthenticated && user) {
-          const order = await localRepository.getById(id);
-          if (order) {
-            syncQueue.add({ type: 'delete', orderId: order.id, orderNumber: order.orderNumber });
-          }
+      if (isAuthenticated && user) {
+        for (const order of updated) {
+          syncQueue.add({ type: 'delete', orderId: order.id, orderNumber: order.orderNumber });
         }
       }
     },
