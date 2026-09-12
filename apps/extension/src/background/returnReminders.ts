@@ -21,7 +21,8 @@ export async function checkReturnReminders(now = new Date()): Promise<void> {
   for (const order of orders) {
     const warning = getReturnWarning(order, now);
     if (!warning) continue;
-    current[order.id] = `${warning.targetDate}:${warning.stage}`;
+    // Sync can replace the device-local id; orderNumber is the repository's stable identity.
+    current[order.orderNumber] = `${warning.targetDate}:${warning.stage}`;
     if (warning.stage === 'overdue') overdueCount += 1;
     if (warning.stage === 'urgent') urgentCount += 1;
   }

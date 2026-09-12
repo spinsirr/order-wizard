@@ -89,6 +89,19 @@ describe('background return reminders', () => {
     expect(JSON.stringify(notification)).not.toMatch(/Private product|private-id|\$20/);
   });
 
+  it('keeps reminder history when cloud sync replaces the local record id', async () => {
+    storage.orders = [order('local-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 26));
+    storage.orders = [order('cloud-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 27));
+    expect(api.notifications.create).toHaveBeenCalledTimes(1);
+    expect(api.notifications.clear).not.toHaveBeenCalled();
+    expect(api.action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
+
+    await checkReturnReminders(new Date(2026, 7, 29));
+    expect(api.notifications.create).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     'reimbursed',
     'deleted',
