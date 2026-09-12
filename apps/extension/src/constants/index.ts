@@ -1,6 +1,13 @@
 // Query keys
 export const ORDERS_KEY = ['orders'] as const;
 
+// Content script matches
+export const AMAZON_ORDER_PAGE_MATCHES = [
+  '*://*.amazon.com/gp/css/order-history*',
+  '*://*.amazon.com/gp/your-account/order-history*',
+  '*://*.amazon.com/your-orders/orders*',
+] as const;
+
 // Storage keys
 export const AUTH_STORAGE_KEY = 'auth_user';
 export const CURRENT_USER_STORAGE_KEY = 'currentUser';

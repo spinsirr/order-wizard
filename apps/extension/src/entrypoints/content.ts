@@ -10,12 +10,10 @@ import {
   showRefreshFeedback,
 } from '@/content/injector';
 import { initFBMarketplace } from '@/content/fbMarketplace';
+import { AMAZON_ORDER_PAGE_MATCHES } from '@/constants';
 
 export default defineContentScript({
-  matches: [
-    '*://*.amazon.com/gp/your-account/order-history*',
-    '*://*.amazon.com/your-orders/orders*',
-  ],
+  matches: [...AMAZON_ORDER_PAGE_MATCHES],
   runAt: 'document_idle',
   main() {
     initializeErrorHandlers();
