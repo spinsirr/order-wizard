@@ -6,10 +6,58 @@ use axum::{body::Body, http::Request, middleware, routing::get, Router};
 use tower::ServiceExt;
 
 #[test]
+fn missing_cli_configuration_keeps_extension_auth_and_rejects_other_clients() {
+    for cli_client_id in [None, Some(String::new()), Some("   ".to_string())] {
+        let policy = AuthPolicy::new(
+            "extension-client",
+            cli_client_id,
+            "https://api.orderwizard.example",
+        )
+        .unwrap();
+        let mut claims = Claims {
+            sub: "user-123".to_string(),
+            email: None,
+            username: None,
+            iss: Some("https://issuer.example".to_string()),
+            aud: Some("https://api.orderwizard.example".to_string()),
+            exp: Some(1_800_000_000),
+            iat: Some(1_700_000_000),
+            token_use: Some("access".to_string()),
+            client_id: Some("extension-client".to_string()),
+            scope: Some(
+                "https://api.orderwizard.example/orders.read \
+                 https://api.orderwizard.example/orders.sync \
+                 https://api.orderwizard.example/orders.status.write \
+                 https://api.orderwizard.example/orders.note.write"
+                    .to_string(),
+            ),
+        };
+
+        assert_eq!(
+            policy.principal_for(&claims),
+            Ok(Principal::extension(UserId::new("user-123")))
+        );
+
+        for client_id in [Some("cli-client".to_string()), Some(String::new())] {
+            claims.client_id = client_id;
+            assert_eq!(
+                policy.principal_for(&claims),
+                Err("Token was issued to an unsupported client")
+            );
+        }
+        claims.client_id = None;
+        assert_eq!(
+            policy.principal_for(&claims),
+            Err("Token missing client_id")
+        );
+    }
+}
+
+#[test]
 fn cli_access_token_with_all_agent_scopes_maps_to_agent_principal() {
     let policy = AuthPolicy::new(
         "extension-client",
-        "cli-client",
+        Some("cli-client".to_string()),
         "https://api.orderwizard.example",
     )
     .unwrap();
@@ -40,7 +88,7 @@ fn cli_access_token_with_all_agent_scopes_maps_to_agent_principal() {
 fn cli_access_token_for_a_different_resource_is_rejected() {
     let policy = AuthPolicy::new(
         "extension-client",
-        "cli-client",
+        Some("cli-client".to_string()),
         "https://api.orderwizard.example",
     )
     .unwrap();
@@ -71,7 +119,7 @@ fn cli_access_token_for_a_different_resource_is_rejected() {
 fn extension_access_token_without_resource_binding_is_rejected() {
     let policy = AuthPolicy::new(
         "extension-client",
-        "cli-client",
+        Some("cli-client".to_string()),
         "https://api.orderwizard.example",
     )
     .unwrap();
@@ -101,7 +149,7 @@ fn extension_access_token_without_resource_binding_is_rejected() {
 async fn cli_scopes_become_operation_level_capabilities() {
     let policy = AuthPolicy::new(
         "extension-client",
-        "cli-client",
+        Some("cli-client".to_string()),
         "https://api.orderwizard.example",
     )
     .unwrap();
@@ -135,7 +183,7 @@ async fn cli_scopes_become_operation_level_capabilities() {
 async fn unauthorized_response_advertises_resource_metadata_and_agent_scopes() {
     let policy = AuthPolicy::new(
         "extension-client",
-        "cli-client",
+        Some("cli-client".to_string()),
         "https://api.orderwizard.example",
     )
     .unwrap();
@@ -170,7 +218,7 @@ async fn unauthorized_response_advertises_resource_metadata_and_agent_scopes() {
 fn extension_and_cli_must_use_distinct_app_clients() {
     let result = AuthPolicy::new(
         "shared-client",
-        "shared-client",
+        Some("shared-client".to_string()),
         "https://api.orderwizard.example",
     );
 

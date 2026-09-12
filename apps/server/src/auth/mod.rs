@@ -181,19 +181,21 @@ pub struct Claims {
 #[derive(Clone, Debug)]
 pub struct AuthPolicy {
     extension_client_id: String,
-    cli_client_id: String,
+    cli_client_id: Option<String>,
     resource_server_identifier: String,
 }
 
 impl AuthPolicy {
     pub fn new(
         extension_client_id: impl Into<String>,
-        cli_client_id: impl Into<String>,
+        cli_client_id: Option<String>,
         resource_server_identifier: impl Into<String>,
     ) -> Result<Self, &'static str> {
         let extension_client_id = extension_client_id.into();
-        let cli_client_id = cli_client_id.into();
-        if extension_client_id == cli_client_id {
+        let cli_client_id = cli_client_id
+            .map(|client_id| client_id.trim().to_string())
+            .filter(|client_id| !client_id.is_empty());
+        if cli_client_id.as_deref() == Some(extension_client_id.as_str()) {
             return Err("OIDC_CLIENT_ID and OIDC_CLI_CLIENT_ID must be different");
         }
         Ok(Self {
@@ -220,7 +222,7 @@ impl AuthPolicy {
             return Err("Token audience does not match this resource");
         }
         let is_extension = client_id == self.extension_client_id;
-        let is_cli = client_id == self.cli_client_id;
+        let is_cli = self.cli_client_id.as_deref() == Some(client_id);
         if !is_extension && !is_cli {
             return Err("Token was issued to an unsupported client");
         }

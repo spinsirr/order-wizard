@@ -118,8 +118,7 @@ pub async fn run() {
 
     let issuer = std::env::var("OIDC_ISSUER").expect("OIDC_ISSUER must be set");
     let extension_client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
-    let cli_client_id =
-        std::env::var("OIDC_CLI_CLIENT_ID").expect("OIDC_CLI_CLIENT_ID must be set");
+    let cli_client_id = std::env::var("OIDC_CLI_CLIENT_ID").ok();
     let resource_uri = std::env::var("RESOURCE_URI").expect("RESOURCE_URI must be set");
     let protected_resource_metadata = routes::oauth_metadata::ProtectedResourceMetadata::new(
         resource_uri.clone(),

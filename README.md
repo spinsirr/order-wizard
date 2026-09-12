@@ -124,11 +124,14 @@ VITE_API_BASE_URL=http://localhost:3000
 MONGODB_URI=mongodb://localhost:27017
 OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
 OIDC_CLIENT_ID=<extension-public-client-id>
-OIDC_CLI_CLIENT_ID=<cli-public-client-id>
+# Optional: set after registering a separate CLI public app client
+# OIDC_CLI_CLIENT_ID=<cli-public-client-id>
 RESOURCE_URI=https://api.example.com
 ```
 
 `RESOURCE_URI` must also be the Cognito resource-server identifier. Both public app clients request resource binding so access-token `aud` equals this URI.
+
+When `OIDC_CLI_CLIENT_ID` is unset or blank, the server accepts only the extension app client. CLI tokens remain disabled until a distinct CLI client ID is configured.
 
 ## Agent CLI
 
@@ -172,6 +175,8 @@ git push origin v1.1.0
 The tag must match the root package version and point to a commit on `main`. The release workflow reruns the shared CI checks, packages the production extension, builds native CLI archives for Linux, macOS, and Windows, deploys that tagged commit to Fly.io, runs a health smoke test, and then publishes the GitHub Release with SHA-256 checksums.
 
 Configure `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, and `VITE_API_BASE_URL` as repository secrets. `FLY_API_TOKEN` must be available to the `production` GitHub environment; deployment protection rules can be added to that environment when approval is required.
+
+Once a CLI public app client is registered, store its ID as the `OIDC_CLI_CLIENT_ID` GitHub Actions secret (repository or `production` environment). Before deployment, the workflow stages it as a Fly runtime secret, which takes effect with the tagged deployment. GitHub Secrets are not automatically available to the running server. Omitting this GitHub secret leaves the existing Fly configuration unchanged; a fresh deployment without a CLI client supports extension login only. Keep the CLI browser-login callback gate described above until that flow is implemented and validated.
 
 ## API Documentation
 

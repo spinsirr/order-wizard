@@ -21,7 +21,7 @@ services:
       - RESOURCE_URI=${RESOURCE_URI:-http://localhost:3000}
       - OIDC_ISSUER=${OIDC_ISSUER}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
-      - OIDC_CLI_CLIENT_ID=${OIDC_CLI_CLIENT_ID}
+      - OIDC_CLI_CLIENT_ID=${OIDC_CLI_CLIENT_ID:-}
     depends_on:
       - mongo
 

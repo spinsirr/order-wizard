@@ -330,7 +330,8 @@ VITE_API_BASE_URL=http://localhost:3000
 MONGODB_URI=mongodb://localhost:27017
 OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
 OIDC_CLIENT_ID=<extension-public-client-id>
-OIDC_CLI_CLIENT_ID=<cli-public-client-id>
+# Optional: set after registering a separate CLI public app client
+# OIDC_CLI_CLIENT_ID=<cli-public-client-id>
 RESOURCE_URI=https://api.example.com
 ```
 

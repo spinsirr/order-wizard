@@ -153,6 +153,17 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
+      - name: Stage CLI client configuration
+        shell: bash
+        run: |
+          if [ -n "$OIDC_CLI_CLIENT_ID" ]; then
+            flyctl secrets set --app order-wizard-api --stage \
+              "OIDC_CLI_CLIENT_ID=$OIDC_CLI_CLIENT_ID"
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          OIDC_CLI_CLIENT_ID: ${{ secrets.OIDC_CLI_CLIENT_ID }}
+
       - name: Deploy tagged commit
         shell: bash
         run: |
