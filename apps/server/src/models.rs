@@ -1,7 +1,8 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderStatus {
     Uncommented,
@@ -32,7 +33,7 @@ pub struct OrderEntity {
 }
 
 /// API response type - serialized with camelCase for frontend
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
     pub id: String,

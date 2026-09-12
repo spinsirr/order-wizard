@@ -8,7 +8,11 @@ use axum::{
 };
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
@@ -181,31 +185,39 @@ pub struct Claims {
 #[derive(Clone, Debug)]
 pub struct AuthPolicy {
     extension_client_id: String,
-    cli_client_id: Option<String>,
+    agent_client_ids: HashSet<String>,
     resource_server_identifier: String,
 }
 
 impl AuthPolicy {
     pub fn new(
         extension_client_id: impl Into<String>,
-        cli_client_id: Option<String>,
         resource_server_identifier: impl Into<String>,
-    ) -> Result<Self, &'static str> {
-        let extension_client_id = extension_client_id.into();
-        let cli_client_id = cli_client_id
-            .map(|client_id| client_id.trim().to_string())
-            .filter(|client_id| !client_id.is_empty());
-        if cli_client_id.as_deref() == Some(extension_client_id.as_str()) {
-            return Err("OIDC_CLIENT_ID and OIDC_CLI_CLIENT_ID must be different");
-        }
-        Ok(Self {
-            extension_client_id,
-            cli_client_id,
+    ) -> Self {
+        Self {
+            extension_client_id: extension_client_id.into(),
+            agent_client_ids: HashSet::new(),
             resource_server_identifier: resource_server_identifier
                 .into()
                 .trim_end_matches('/')
                 .to_string(),
-        })
+        }
+    }
+
+    pub fn with_agent_clients(
+        mut self,
+        client_ids: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<Self, &'static str> {
+        for client_id in client_ids {
+            let client_id = client_id.into().trim().to_string();
+            if client_id == self.extension_client_id {
+                return Err("Agent client IDs must be different from OIDC_CLIENT_ID");
+            }
+            if !client_id.is_empty() {
+                self.agent_client_ids.insert(client_id);
+            }
+        }
+        Ok(self)
     }
 
     fn principal_for(&self, claims: &Claims) -> Result<Principal, &'static str> {
@@ -222,8 +234,8 @@ impl AuthPolicy {
             return Err("Token audience does not match this resource");
         }
         let is_extension = client_id == self.extension_client_id;
-        let is_cli = self.cli_client_id.as_deref() == Some(client_id);
-        if !is_extension && !is_cli {
+        let is_agent = self.agent_client_ids.contains(client_id);
+        if !is_extension && !is_agent {
             return Err("Token was issued to an unsupported client");
         }
 

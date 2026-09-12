@@ -2,13 +2,14 @@ mod application;
 mod auth;
 mod db;
 mod errors;
+mod mcp;
 mod models;
 mod routes;
 
 use application::{MongoOrderRepository, OrderApplication};
 use auth::{auth_middleware, AuthError, AuthPolicy, AuthUser, JwksVerifier};
 use axum::http::{header, Method};
-use axum::{middleware, Extension, Json};
+use axum::{middleware, Extension, Json, Router};
 use serde::Serialize;
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
@@ -118,13 +119,38 @@ pub async fn run() {
 
     let issuer = std::env::var("OIDC_ISSUER").expect("OIDC_ISSUER must be set");
     let extension_client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
-    let cli_client_id = std::env::var("OIDC_CLI_CLIENT_ID").ok();
     let resource_uri = std::env::var("RESOURCE_URI").expect("RESOURCE_URI must be set");
+    let mcp_transport_config =
+        mcp::transport_config(&resource_uri).expect("MCP transport configuration is invalid");
     let protected_resource_metadata = routes::oauth_metadata::ProtectedResourceMetadata::new(
         resource_uri.clone(),
         issuer.clone(),
     );
-    let auth_policy = AuthPolicy::new(extension_client_id, cli_client_id, resource_uri)
+    let cli_client_id = std::env::var("OIDC_CLI_CLIENT_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let mut mcp_client_ids = std::env::var("OIDC_MCP_CLIENT_IDS")
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    mcp_client_ids.sort();
+    mcp_client_ids.dedup();
+    let client_config = routes::cli_auth::ClientConfig {
+        issuer: issuer.clone(),
+        resource: resource_uri.trim_end_matches('/').to_string(),
+        cli_client_id: cli_client_id.clone(),
+        mcp_client_ids: mcp_client_ids.clone(),
+    };
+    let auth_policy = AuthPolicy::new(extension_client_id, resource_uri)
+        .with_agent_clients(cli_client_id.into_iter().chain(mcp_client_ids))
         .expect("OIDC app client configuration is invalid");
     let verifier = JwksVerifier::new(issuer, auth_policy);
     tracing::info!("JWT verifier initialized");
@@ -162,13 +188,26 @@ pub async fn run() {
         .routes(utoipa_axum::routes!(me))
         .merge(routes::orders::router())
         .merge(routes::agent_orders::router())
-        .layer(Extension(order_application))
+        .layer(Extension(order_application.clone()))
+        .layer(middleware::from_fn_with_state(
+            verifier.clone(),
+            auth_middleware,
+        ));
+
+    let mcp_routes = Router::new()
+        .nest_service(
+            "/mcp",
+            mcp::service(order_application.clone(), mcp_transport_config),
+        )
         .layer(middleware::from_fn_with_state(verifier, auth_middleware));
 
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .merge(public_routes)
         .merge(protected_routes)
         .split_for_parts();
+    let router = router
+        .merge(mcp_routes)
+        .merge(routes::cli_auth::router(client_config));
 
     let enable_swagger = std::env::var("ENABLE_SWAGGER")
         .map(|value| value == "true" || value == "1")

@@ -153,16 +153,24 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Stage CLI client configuration
+      - name: Stage CLI and MCP configuration
         shell: bash
         run: |
-          if [ -n "$OIDC_CLI_CLIENT_ID" ]; then
-            flyctl secrets set --app order-wizard-api --stage \
-              "OIDC_CLI_CLIENT_ID=$OIDC_CLI_CLIENT_ID"
+          CONFIG=()
+          for NAME in OIDC_CLI_CLIENT_ID OIDC_MCP_CLIENT_IDS MCP_ALLOWED_HOSTS MCP_ALLOWED_ORIGINS; do
+            if [ -n "${!NAME}" ]; then
+              CONFIG+=("$NAME=${!NAME}")
+            fi
+          done
+          if [ "${#CONFIG[@]}" -gt 0 ]; then
+            flyctl secrets set --app order-wizard-api --stage "${CONFIG[@]}"
           fi
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           OIDC_CLI_CLIENT_ID: ${{ secrets.OIDC_CLI_CLIENT_ID }}
+          OIDC_MCP_CLIENT_IDS: ${{ secrets.OIDC_MCP_CLIENT_IDS }}
+          MCP_ALLOWED_HOSTS: ${{ secrets.MCP_ALLOWED_HOSTS }}
+          MCP_ALLOWED_ORIGINS: ${{ secrets.MCP_ALLOWED_ORIGINS }}
 
       - name: Deploy tagged commit
         shell: bash

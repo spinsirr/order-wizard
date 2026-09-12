@@ -52,9 +52,10 @@ just bump X.Y.Z   # Synchronize release versions and refresh Cargo.lock
 ### Authentication Flow
 1. Cognito OIDC authorization code flow via oauth4webapi
 2. Authorization requests bind tokens to `RESOURCE_URI` and request custom order scopes
-3. Extension receives an access token; CLI uses a separate public app client
+3. Extension, CLI, and MCP use distinct public app clients; CLI/MCP use PKCE and the registered HTTPS callback relay
 4. Server validates RS256, issuer, expiry, `token_use=access`, resource audience, and client allowlist
 5. Final token scopes are intersected with the app client's maximum capabilities to construct `Principal`
+6. CLI tokens live in the OS credential store; `order-wizard mcp` uses a separate MCP login profile and stdio for Claude Code
 
 ### Extension Structure (apps/extension/src/)
 ```
@@ -90,9 +91,11 @@ src/
 ├── auth/                # Cognito verification and scope-to-Principal mapping
 ├── db.rs                # MongoDB connection
 ├── models.rs            # Shared transport/persistence models
+├── mcp.rs               # Restricted stateless HTTP MCP tools
 └── routes/
     ├── orders.rs        # Extension sync/CRUD REST surface
-    └── agent_orders.rs  # Restricted list/search/detail/status/note REST surface
+    ├── agent_orders.rs  # Restricted list/search/detail/status/note REST surface
+    └── cli_auth.rs      # Public client metadata and HTTPS authorization-code relay
 ```
 
 ### Data Sync
@@ -332,8 +335,18 @@ OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
 OIDC_CLIENT_ID=<extension-public-client-id>
 # Optional: set after registering a separate CLI public app client
 # OIDC_CLI_CLIENT_ID=<cli-public-client-id>
+# OIDC_MCP_CLIENT_IDS=<mcp-public-client-id>
 RESOURCE_URI=https://api.example.com
 ```
+
+### CLI and MCP
+
+- `order-wizard auth login|status|logout` manages the CLI profile; add `--mcp` for the independent MCP profile.
+- `order-wizard mcp` serves only MCP JSON-RPC on stdout. Login URLs and errors belong on stderr.
+- Tokens are stored with `keyring`, never in repository files or MCP configuration. `ORDER_WIZARD_ACCESS_TOKEN` supports headless automation.
+- `ORDER_WIZARD_API_URL` defaults to the production API. OAuth login requires HTTPS and a browser on the same machine.
+- The relay callback is `/oauth/cli/callback`; only validated loopback destinations are permitted. Keep state validation, PKCE, no-store, and no-referrer behavior intact.
+- Agent allowlists are optional, but must not contain the extension client. HTTP MCP requires protocol `2026-07-28`; stdio negotiates the SDK-supported versions.
 
 ## Data Model
 

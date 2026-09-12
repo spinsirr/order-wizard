@@ -7,7 +7,9 @@ description: Inspect and update a user's Order Wizard orders through the install
 
 Use the installed `order-wizard` CLI. It is the supported agent boundary and emits JSON on stdout. Do not call MongoDB or the HTTP API directly.
 
-Before the first operation, run `order-wizard --version`. If the binary is unavailable, tell the user that Order Wizard CLI must be installed. If it returns `AUTH_REQUIRED`, ask the user to authenticate or configure their local installation; never ask them to paste an access token into chat.
+Before the first operation, run `order-wizard --version`. If the binary is unavailable, tell the user that Order Wizard CLI must be installed. If it returns `AUTH_REQUIRED`, guide the user through `order-wizard auth login`; never ask them to paste an access token into chat.
+
+For Claude Code MCP, use `order-wizard auth login --mcp`, then register `order-wizard mcp` as a stdio server. The MCP profile is separate from the CLI profile; use `auth status --mcp` or `auth logout --mcp` to manage it. Credentials stay in the system credential store. The browser must run on the same computer as the login command.
 
 ## Commands
 

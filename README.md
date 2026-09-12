@@ -10,7 +10,7 @@ An offline-first Amazon order tracker with a Rust API and agent-safe CLI.
 - **Status Workflow** - Track orders through: Uncommented → Commented → Comment Revealed → Reimbursed
 - **Export** - Export orders to CSV
 - **Search & Filter** - Fuzzy search and filter by status
-- **Agent Access** - Installable JSON CLI for list, search, detail, status, and note operations
+- **Agent Access** - Installable JSON CLI and Claude Code MCP for list, search, detail, status, and note operations
 - **Least Privilege** - CLI/agent credentials cannot create, delete, or batch-mutate orders
 
 ## Return reminders
@@ -126,12 +126,13 @@ OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
 OIDC_CLIENT_ID=<extension-public-client-id>
 # Optional: set after registering a separate CLI public app client
 # OIDC_CLI_CLIENT_ID=<cli-public-client-id>
+# OIDC_MCP_CLIENT_IDS=<mcp-public-client-id>
 RESOURCE_URI=https://api.example.com
 ```
 
-`RESOURCE_URI` must also be the Cognito resource-server identifier. Both public app clients request resource binding so access-token `aud` equals this URI.
+`RESOURCE_URI` is the canonical API URL without a trailing slash and must also be the Cognito resource-server identifier. Extension, CLI, and MCP request resource binding so access-token `aud` equals this URI.
 
-When `OIDC_CLI_CLIENT_ID` is unset or blank, the server accepts only the extension app client. CLI tokens remain disabled until a distinct CLI client ID is configured.
+CLI and MCP each use a separate public app client. Their allowlists are optional: unset or blank values disable that client profile without preventing extension login. Neither may reuse the extension client ID. `OIDC_MCP_CLIENT_IDS` accepts comma-separated IDs; the bundled MCP login currently requires exactly one. The server publishes these public client IDs and issuer at `/.well-known/order-wizard-clients`.
 
 ## Agent CLI
 
@@ -141,17 +142,47 @@ Install from the repository:
 cargo install --git https://github.com/spinsirr/order-wizard order-wizard-cli --bin order-wizard
 ```
 
-The current automation seam reads `ORDER_WIZARD_API_URL` and `ORDER_WIZARD_ACCESS_TOKEN` from the local environment. The token must come from the CLI public app client and include the API audience plus `orders.read`, `orders.status.write`, and `orders.note.write` scopes.
+Sign in once, then use the CLI:
 
 ```bash
+order-wizard auth login
+order-wizard auth status
 order-wizard orders list --limit 20
 order-wizard orders search "wireless headphones" --status commented
 order-wizard orders get <order-id>
 order-wizard orders status <order-id> reimbursed
 order-wizard orders note <order-id> "Follow up tomorrow"
+order-wizard auth logout
 ```
 
-The paired Skill is in `skills/order-wizard`. Native `auth login` remains gated on selecting and validating a production Cognito callback strategy; the AWS-documented HTTP loopback callback is testing-only.
+The default API is `https://order-wizard-api.fly.dev`. `ORDER_WIZARD_API_URL` selects another installation and keeps its credentials separate. Tokens are saved in the system credential store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), refreshed automatically, and never printed. Linux browser login requires a working Secret Service session. `auth login --no-browser` prints the login URL without opening it. Sign in using a browser on the same computer as the CLI.
+
+For automation, `ORDER_WIZARD_ACCESS_TOKEN` overrides saved credentials. Supply an access token from an allowed agent client with the API audience and the three order scopes. Keep tokens out of chat and checked-in configuration. The paired agent Skill is in `skills/order-wizard`.
+
+### Claude Code MCP
+
+The CLI also provides a local stdio MCP server. Give it its own login, then register it in Claude Code:
+
+```bash
+order-wizard auth login --mcp
+claude mcp add --transport stdio --scope user order-wizard -- order-wizard mcp
+```
+
+Restart Claude Code or reconnect through `/mcp`. It exposes `orders_list`, `orders_search`, `orders_get`, `orders_set_status`, and `orders_set_note`. It reads the MCP profile from the system credential store on each operation, so refreshed credentials are available without copying tokens into Claude configuration. Use `auth status --mcp` and `auth logout --mcp` to manage that login separately.
+
+The API also serves stateless Streamable HTTP MCP at `/mcp` for pre-registered clients supporting protocol `2026-07-28`. The Claude Code stdio transport negotiates the SDK's supported versions independently. HTTP MCP validates Host and Origin; the canonical API host/origin are allowed automatically. `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` can add comma-separated exact entries for another deployment address.
+
+### Cognito client setup
+
+Create distinct public clients without client secrets for CLI and MCP. Enable only authorization-code grant and these custom scopes:
+
+- `<RESOURCE_URI>/orders.read`
+- `<RESOURCE_URI>/orders.status.write`
+- `<RESOURCE_URI>/orders.note.write`
+
+Register the exact HTTPS callback `<RESOURCE_URI>/oauth/cli/callback` for both clients. The CLI uses PKCE S256 and one-time state; the API forwards only the authorization code or denial to the originating `127.0.0.1` listener. The listener checks its Host and state before exchanging the code directly with Cognito using the original HTTPS callback and PKCE verifier. OAuth traffic never follows unexpected HTTP redirects, and callback responses disable caching and referrers. Cognito does not need a registered HTTP loopback callback.
+
+Production clients use 15-minute access/ID tokens, five-day refresh tokens, token revocation, and generic user-existence errors. SDK password and SRP flows are disabled. Refresh rotation remains disabled because separate CLI/MCP processes can refresh concurrently. Logout revokes the refresh token and removes local credentials; it does not clear the browser's Cognito session. Previously issued access tokens remain valid until expiry under the API's offline JWT verification.
 
 ## Releases
 
@@ -176,7 +207,7 @@ The tag must match the root package version and point to a commit on `main`. The
 
 Configure `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, and `VITE_API_BASE_URL` as repository secrets. `FLY_API_TOKEN` must be available to the `production` GitHub environment; deployment protection rules can be added to that environment when approval is required.
 
-Once a CLI public app client is registered, store its ID as the `OIDC_CLI_CLIENT_ID` GitHub Actions secret (repository or `production` environment). Before deployment, the workflow stages it as a Fly runtime secret, which takes effect with the tagged deployment. GitHub Secrets are not automatically available to the running server. Omitting this GitHub secret leaves the existing Fly configuration unchanged; a fresh deployment without a CLI client supports extension login only. Keep the CLI browser-login callback gate described above until that flow is implemented and validated.
+Store the separate public client IDs as `OIDC_CLI_CLIENT_ID` and `OIDC_MCP_CLIENT_IDS` GitHub Actions secrets (repository or `production` environment). Optional `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` secrets use the same names. Before deployment, the workflow stages configured values as Fly runtime secrets; they take effect with the tagged deployment. GitHub Secrets are not automatically available to the running server. Omitting a GitHub secret preserves the existing Fly value.
 
 ## API Documentation
 

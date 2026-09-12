@@ -299,6 +299,15 @@ impl OrderApplication {
         search: OrderSearch,
     ) -> Result<Vec<Order>, ApplicationError> {
         principal.require(Capability::ReadOrders)?;
+        if search
+            .query
+            .as_deref()
+            .is_some_and(|query| query.trim().is_empty())
+        {
+            return Err(ApplicationError::InvalidInput(
+                "Search query must not be empty".to_string(),
+            ));
+        }
         if !(1..=100).contains(&search.limit) {
             return Err(ApplicationError::InvalidInput(
                 "Search limit must be between 1 and 100".to_string(),

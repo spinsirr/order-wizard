@@ -266,3 +266,29 @@ async fn agent_search_is_tenant_scoped_filtered_and_bounded() {
     assert_eq!(results[0].user_id, "alice");
     assert_eq!(results[0].status, OrderStatus::Commented);
 }
+
+#[tokio::test]
+async fn search_rejects_an_empty_query_instead_of_accidentally_listing_everything() {
+    let application = OrderApplication::new(InMemoryOrderRepository::with_orders([order(
+        "alice-order",
+        "alice",
+        "111-1111111-1111111",
+    )]));
+
+    let result = application
+        .search_orders(
+            &Principal::agent(UserId::new("alice")),
+            OrderSearch {
+                query: Some("   ".to_string()),
+                status: None,
+                limit: 50,
+            },
+        )
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(ApplicationError::InvalidInput(message))
+            if message == "Search query must not be empty"
+    ));
+}
