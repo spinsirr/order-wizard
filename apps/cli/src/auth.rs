@@ -127,7 +127,7 @@ fn entry(profile: Profile, api: &Url) -> Result<keyring::Entry, CliError> {
 fn load(profile: Profile, api: &Url) -> Result<Session, CliError> {
     let data = entry(profile, api)
         .map_err(|_| CliError::auth("No saved login is available: the system credential store is unavailable. Set ORDER_WIZARD_ACCESS_TOKEN or enable the system credential store."))?
-        .get_password()
+        .get_secret()
         .map_err(|error| match error {
             keyring::Error::NoEntry => CliError::auth(format!(
                 "Run order-wizard auth login{} (or set ORDER_WIZARD_ACCESS_TOKEN)",
@@ -139,14 +139,14 @@ fn load(profile: Profile, api: &Url) -> Result<Session, CliError> {
             )),
             _ => CliError::config("Could not read the system credential store"),
         })?;
-    serde_json::from_str(&data)
+    serde_json::from_slice(&data)
         .map_err(|_| CliError::auth("Stored login is invalid; sign in again"))
 }
 fn save(profile: Profile, api: &Url, session: &Session) -> Result<(), CliError> {
     let data =
-        serde_json::to_string(session).map_err(|_| CliError::config("Could not encode login"))?;
+        serde_json::to_vec(session).map_err(|_| CliError::config("Could not encode login"))?;
     entry(profile, api)?
-        .set_password(&data)
+        .set_secret(&data)
         .map_err(|_| CliError::config("Could not save login to the system credential store"))
 }
 
