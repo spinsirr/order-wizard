@@ -155,7 +155,7 @@ order-wizard orders note <order-id> "Follow up tomorrow"
 order-wizard auth logout
 ```
 
-The default API is `https://order-wizard-api.fly.dev`. `ORDER_WIZARD_API_URL` selects another installation and keeps its credentials separate. Tokens are saved in the system credential store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), refreshed automatically, and never printed. Linux browser login requires a working Secret Service session. `auth login --no-browser` prints the login URL without opening it. Sign in using a browser on the same computer as the CLI.
+The default API is `https://order-wizard-api.fly.dev`. `ORDER_WIZARD_API_URL` selects another installation and keeps its credentials separate. Refresh credentials are saved in the system credential store (macOS Keychain, Windows Credential Manager, or Linux Secret Service) and never printed. Access tokens stay in memory: a new CLI process refreshes its session, while the running MCP process reuses the token until it needs renewal. Linux browser login requires a working Secret Service session. `auth login --no-browser` prints the login URL without opening it. Sign in using a browser on the same computer as the CLI.
 
 For automation, `ORDER_WIZARD_ACCESS_TOKEN` overrides saved credentials. Supply an access token from an allowed agent client with the API audience and the three order scopes. Keep tokens out of chat and checked-in configuration. The paired agent Skill is in `skills/order-wizard`.
 

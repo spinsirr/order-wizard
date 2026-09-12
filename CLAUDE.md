@@ -343,7 +343,7 @@ RESOURCE_URI=https://api.example.com
 
 - `order-wizard auth login|status|logout` manages the CLI profile; add `--mcp` for the independent MCP profile.
 - `order-wizard mcp` serves only MCP JSON-RPC on stdout. Login URLs and errors belong on stderr.
-- Tokens are stored with `keyring`, never in repository files or MCP configuration. `ORDER_WIZARD_ACCESS_TOKEN` supports headless automation.
+- Refresh credentials are stored with `keyring`; access tokens stay in memory. Neither belongs in repository files or MCP configuration. `ORDER_WIZARD_ACCESS_TOKEN` supports headless automation.
 - `ORDER_WIZARD_API_URL` defaults to the production API. OAuth login requires HTTPS and a browser on the same machine.
 - The relay callback is `/oauth/cli/callback`; only validated loopback destinations are permitted. Keep state validation, PKCE, no-store, and no-referrer behavior intact.
 - Agent allowlists are optional, but must not contain the extension client. HTTP MCP requires protocol `2026-07-28`; stdio negotiates the SDK-supported versions.

@@ -1,5 +1,6 @@
 use std::{
-    sync::{Arc, Mutex},
+    collections::HashMap,
+    sync::{Arc, LazyLock, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -22,6 +23,8 @@ use crate::CliError;
 
 const DEFAULT_API: &str = "https://order-wizard-api.fly.dev";
 const KEYRING_SERVICE: &str = "order-wizard";
+static ACCESS_CACHE: LazyLock<Mutex<HashMap<String, Session>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Copy)]
 pub(crate) enum Profile {
@@ -53,12 +56,15 @@ struct Metadata {
     revocation_endpoint: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Session {
     resource: String,
     client_id: String,
     token_endpoint: String,
     revocation_endpoint: String,
+    // Keep short-lived tokens in memory. Persisting both tokens can exceed the
+    // Windows credential store's size limit even for ordinary Cognito sessions.
+    #[serde(skip)]
     access_token: String,
     refresh_token: String,
     expires_at: u64,
@@ -121,8 +127,11 @@ fn login_state(port: u16) -> CsrfToken {
     CsrfToken::new(format!("{}.{port}", CsrfToken::new_random_len(32).secret()))
 }
 fn entry(profile: Profile, api: &Url) -> Result<keyring::Entry, CliError> {
-    keyring::Entry::new(KEYRING_SERVICE, &format!("{}:{}", profile.name(), api))
+    keyring::Entry::new(KEYRING_SERVICE, &cache_key(profile, api))
         .map_err(|_| CliError::config("System credential store is unavailable"))
+}
+fn cache_key(profile: Profile, api: &Url) -> String {
+    format!("{}:{}", profile.name(), api)
 }
 fn load(profile: Profile, api: &Url) -> Result<Session, CliError> {
     let data = entry(profile, api)
@@ -147,7 +156,12 @@ fn save(profile: Profile, api: &Url, session: &Session) -> Result<(), CliError> 
         serde_json::to_vec(session).map_err(|_| CliError::config("Could not encode login"))?;
     entry(profile, api)?
         .set_secret(&data)
-        .map_err(|_| CliError::config("Could not save login to the system credential store"))
+        .map_err(|_| CliError::config("Could not save login to the system credential store"))?;
+    ACCESS_CACHE
+        .lock()
+        .unwrap()
+        .insert(cache_key(profile, api), session.clone());
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -368,8 +382,12 @@ pub(crate) async fn access_token(profile: Profile, api: &Url) -> Result<String, 
     if session.resource.trim_end_matches('/') != api.as_str().trim_end_matches('/') {
         return Err(CliError::auth("Stored login belongs to a different API"));
     }
-    if session.expires_at > now() + 30 {
-        return Ok(session.access_token);
+    // Read the saved session before using the cache so another process's logout
+    // or account switch takes effect on the next tool call.
+    if let Some(cached) = ACCESS_CACHE.lock().unwrap().get(&cache_key(profile, api)) {
+        if cached.refresh_token == session.refresh_token && cached.expires_at > now() + 30 {
+            return Ok(cached.access_token.clone());
+        }
     }
     secure_endpoint(&session.token_endpoint)?;
     let oauth = BasicClient::new(ClientId::new(session.client_id.clone()))
@@ -414,6 +432,10 @@ pub(crate) async fn logout(profile: Profile) -> Result<Value, CliError> {
     entry(profile, &api)?
         .delete_credential()
         .map_err(|_| CliError::config("Could not remove saved login"))?;
+    ACCESS_CACHE
+        .lock()
+        .unwrap()
+        .remove(&cache_key(profile, &api));
     if !result.is_ok_and(|response| response.status().is_success()) {
         return Err(CliError::network(
             "Saved login removed, but remote revocation failed",

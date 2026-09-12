@@ -3,6 +3,24 @@ use axum::{body::Body, http::Request};
 use tower::ServiceExt;
 
 #[test]
+fn saved_session_excludes_short_lived_access_tokens() {
+    let session = Session {
+        resource: "https://order-wizard-api.fly.dev".into(),
+        client_id: "public-client-id".into(),
+        token_endpoint: "https://issuer.example/oauth2/token".into(),
+        revocation_endpoint: "https://issuer.example/oauth2/revoke".into(),
+        access_token: "short-lived-access-token".into(),
+        refresh_token: "long-lived-refresh-token".into(),
+        expires_at: 1234,
+    };
+    let stored = serde_json::to_value(&session).unwrap();
+    assert!(stored.get("access_token").is_none());
+    let restored: Session = serde_json::from_value(stored).unwrap();
+    assert!(restored.access_token.is_empty());
+    assert_eq!(restored.refresh_token, session.refresh_token);
+}
+
+#[test]
 fn generated_state_satisfies_the_https_relay_contract() {
     let state = login_state(8765);
     let (nonce, port) = state.secret().rsplit_once('.').unwrap();
