@@ -18,7 +18,8 @@ async fn main() {
     };
 
     match execute(cli).await {
-        Ok(value) => println!("{value}"),
+        Ok(value) if !value.is_null() => println!("{value}"),
+        Ok(_) => {}
         Err(error) => exit_with_error(error),
     }
 }

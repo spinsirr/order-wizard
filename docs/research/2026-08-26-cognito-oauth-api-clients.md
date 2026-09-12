@@ -2,6 +2,8 @@
 
 日期：2026-08-26
 
+2026-09-12 更新：CLI 和 Claude Code MCP 已选择并实现受控 HTTPS callback；见文末当前实施状态。历史分析中的待办不代表当前代码仍缺少对应校验。
+
 ## 结论
 
 - 保留一个 Cognito user pool，但至少拆成 **Extension public app client** 与 **CLI public app client**。同一 user pool 支持多个 app client，且每个 client 可以独立配置 grant、callback、scope、token 时效与撤销策略。[Application-specific settings with app clients](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-client-apps.html)
@@ -134,7 +136,7 @@ AWS API reference 允许 callback 使用 `http://localhost`、`http://127.0.0.1`
 - Extension sign-out 会 revoke refresh token、清本地 storage、清 managed-login cookie。
 - CLI 固定 loopback callback 对三平台完成真实 Cognito 互操作验证；不能只用 mock OAuth server 验收。
 
-## 尚未解除的实施门槛
+## 研究时的实施门槛（2026-08-26）
 
 1. **生产 CLI callback**：AWS 将 HTTP loopback 标成仅测试；需要明确选择并验证生产 callback 策略。
 2. **Canonical resource URI**：必须确定 REST API 与 `/mcp` 是共享一个 audience，还是分别使用不同 resource URI；Cognito 一次 authorization 只能绑定一个 resource。
@@ -146,5 +148,13 @@ AWS API reference 允许 callback 使用 `http://localhost`、`http://127.0.0.1`
 - REST、未来的 `/mcp` 与 CLI 共用一个 canonical protected resource：部署根地址 `RESOURCE_URI`（不带尾部 `/`）。它们共享同一用户数据与 capability 模型，endpoint 差异由 scopes 和 application policy 控制，不再为 `/mcp` 建第二个 audience。
 - 服务端现已固定 RS256、要求 access token、校验 `client_id` allowlist 与 resource `aud`，并把最终 scopes 与 Extension/CLI 各自最大权限取交集。两个 app client ID 若相同会在启动时失败。
 - Extension authorization request 已加入 resource binding、完整 Extension scopes 和一次性 state；sign-out 会先尝试 revoke refresh token，再清本地会话与 managed-login cookie。
-- CLI 的 list/search/get/status/note 命令与配套 Skill 已实现；生产 `auth login` 仍等待 callback 策略和真实 Cognito 互操作验证，不用“随机 loopback 端口”冒充完成。
+- CLI 的 list/search/get/status/note 命令、配套 Skill、`auth login/status/logout` 和 Claude Code stdio MCP 已实现。Cognito 注册的 callback 为 `https://order-wizard-api.fly.dev/oauth/cli/callback`；API 只把 code/error 转回本机监听器，监听器校验 Host 和一次性 state，CLI 用原 HTTPS redirect URI 与 PKCE verifier 直接兑换 token。随机端口只用于本机接收，并非 Cognito callback。
 - 若不增加服务端 denylist，项目接受“已签发 access token 最迟到 `exp` 才失效”的 Cognito/JWT 语义。生产 app client 应配置短 access-token lifetime；若产品改为要求即时撤销，再引入有状态 revocation 检查。
+
+## 当前实施状态（2026-09-12）
+
+- CLI 与 MCP 使用独立公共客户端，各自仅允许三项 agent scopes，无 client secret。两者使用相同的已注册 HTTPS callback，均已在 Cognito 保存。
+- 客户端 access/ID token 时效为 15 分钟、refresh 为五天；开启 revoke 与 prevent-user-existence-errors，仅保留 refresh SDK flow。多个本机进程共享一份登录，暂不开启 refresh rotation。
+- CLI 登录只请求订单 scopes，不请求 ID token。凭据由 OS credential store 保存，按 API 地址和 CLI/MCP profile 隔离；登录后调用 `/me` 验证 audience/client 配置，后续请求自动刷新。
+- Claude Code 使用 `order-wizard mcp` stdio 接口和独立 MCP 登录，无需替 Claude Code 注册它自己的 HTTP loopback callback。HTTP MCP 仍保留给预注册客户端。
+- GitHub Secrets 保存两类公共 client ID，发布流程把它们写入 Fly runtime secrets。生产路径需要在新版本部署后完成实际 Cognito 登录验证；单元测试不能替代这一步。
