@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Follow [AGENTS.md](AGENTS.md) for project workflow rules, including the disabled `/ship` skill.
+
 ## Project Overview
 
 Amazon Order Wizard - A browser extension for tracking Amazon orders with cloud sync support.
