@@ -23,11 +23,11 @@ if (!versionPattern.test(cargoToml)) {
 }
 await writeFile(cargoPath, cargoToml.replace(versionPattern, `$1${version}$2`));
 
-const metadata = Bun.spawnSync(
-  ['cargo', 'metadata', '--format-version', '1', '--no-deps'],
+const lockUpdate = Bun.spawnSync(
+  ['cargo', 'update', '--workspace'],
   { cwd: repositoryRoot, stdout: 'ignore', stderr: 'inherit' },
 );
-if (metadata.exitCode !== 0) {
+if (lockUpdate.exitCode !== 0) {
   throw new Error('Failed to refresh Cargo.lock');
 }
 
