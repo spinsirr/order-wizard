@@ -1,8 +1,10 @@
+import { initializeReturnReminders } from '@/background/returnReminders';
 import { initializeErrorHandlers } from '@/lib';
 import type { ExtensionMessage } from '@/types/messages';
 
 export default defineBackground(() => {
   initializeErrorHandlers();
+  initializeReturnReminders();
 
   chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) return false;

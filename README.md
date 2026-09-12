@@ -13,6 +13,14 @@ An offline-first Amazon order tracker with a Rust API and agent-safe CLI.
 - **Agent Access** - Installable JSON CLI for list, search, detail, status, and note operations
 - **Least Privilege** - CLI/agent credentials cannot create, delete, or batch-mutate orders
 
+## Return reminders
+
+Unreimbursed orders get a return reminder 25 calendar days after the saved order date, an urgent reminder at 28 days, and a red warning at 30 days. The panel shows a countdown, a reminder filter, and a **Start return** button that opens Amazon's Returns Center for that order. Choose the items, actual return reason, refund and return method, and submit on Amazon. Opening the flow does not mark the order as returned or reimbursed. Reimbursing or deleting an order clears its reminder.
+
+The extension checks local orders when Chrome starts, when orders change, and hourly while Chrome runs. A toolbar badge shows the number needing attention; desktop notifications are sent once per order per stage, with simultaneous reminders grouped together. Notification history is stored only on the device. Chrome/system notification settings control whether desktop alerts appear; the panel and badge still work when notifications are disabled.
+
+The 30-day mark is an estimate from **order placement**, not Amazon's actual return deadline. Confirm eligibility and the deadline on Amazon. Captured English dates and ISO dates are supported; unrecognized dates cannot generate a timed reminder. Orders beyond 30 days remain flagged until reimbursed or removed. No return is submitted automatically.
+
 ## Architecture
 
 ### Monorepo Structure

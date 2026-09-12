@@ -6,6 +6,8 @@ import {
   useUpdateOrderNote,
   useUpdateOrderStatus,
 } from '@/hooks/useOrders';
+import { useReturnWarnings } from '@/hooks/useReturnWarnings';
+import { ReturnWarningSummary } from './ReturnWarningSummary';
 import type { OrderStatus } from '@/types';
 import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
 import { filterAndSortOrders } from '@/utils/orderFilters';
@@ -30,17 +32,32 @@ export function OrderTable() {
   // UI state (local - no need for global store)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortOption, setSortOption] = useState<OrderSortOption>('created-desc');
+  const [sortOption, setSortOption] = useState<OrderSortOption>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'returns'
+      ? 'date-asc'
+      : 'created-desc',
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());
+
+  const [showingWarnings, setShowingWarnings] = useState(
+    () => new URLSearchParams(window.location.search).get('view') === 'returns',
+  );
+  const returnWarnings = useReturnWarnings(orders);
 
   // Keep the input responsive; defer the heavy filter/sort pass to a low-priority render.
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const displayOrders = useMemo(
-    () => filterAndSortOrders(orders, deferredSearchQuery, statusFilter, sortOption),
-    [orders, deferredSearchQuery, statusFilter, sortOption],
+    () =>
+      filterAndSortOrders(
+        showingWarnings ? orders.filter((order) => returnWarnings.has(order.id)) : orders,
+        deferredSearchQuery,
+        statusFilter,
+        sortOption,
+      ),
+    [orders, deferredSearchQuery, statusFilter, sortOption, showingWarnings, returnWarnings],
   );
 
   // Prune selected IDs only when the underlying order set changes, not on every search keystroke.
@@ -55,7 +72,7 @@ export function OrderTable() {
     });
   }, [orders]);
 
-  const selectedCount = selectedIds.size;
+  const selectedCount = displayOrders.filter((order) => selectedIds.has(order.id)).length;
   const allSelected = displayOrders.length > 0 && selectedCount === displayOrders.length;
   const someSelected = selectedCount > 0 && selectedCount < displayOrders.length;
 
@@ -79,17 +96,14 @@ export function OrderTable() {
   }, []);
 
   const handleDeleteSelected = useCallback(() => {
-    setSelectedIds((current) => {
-      if (current.size === 0) return current;
-      const ids = Array.from(current);
-      setConfirmData({
-        type: 'bulk',
-        orderIds: ids,
-        message: `Delete ${ids.length} selected order${ids.length === 1 ? '' : 's'}?`,
-      });
-      return current;
+    const ids = displayOrders.filter((order) => selectedIds.has(order.id)).map((order) => order.id);
+    if (ids.length === 0) return;
+    setConfirmData({
+      type: 'bulk',
+      orderIds: ids,
+      message: `Delete ${ids.length} selected order${ids.length === 1 ? '' : 's'}?`,
     });
-  }, []);
+  }, [displayOrders, selectedIds]);
 
   const handleDeleteSingle = useCallback((orderId: string) => {
     setConfirmData({ type: 'single', orderId, message: 'Delete this order?' });
@@ -169,6 +183,16 @@ export function OrderTable() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-shrink-0 space-y-5 p-3 sm:p-4">
+        <ReturnWarningSummary
+          warnings={returnWarnings}
+          showingWarnings={showingWarnings}
+          onToggle={() => {
+            setShowingWarnings(!showingWarnings);
+            setSearchQuery('');
+            setStatusFilter('all');
+            if (!showingWarnings) setSortOption('date-asc');
+          }}
+        />
         <OrderTableToolbar
           displayCount={displayOrders.length}
           selectedCount={selectedCount}
@@ -193,8 +217,15 @@ export function OrderTable() {
         ref={scrollParentRef}
         className="flex-1 overflow-y-auto px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4"
       >
-        {displayOrders.length === 0 ? (
-          <OrderTableNoResults searchQuery={deferredSearchQuery} onClearSearch={handleClearSearch} />
+        {showingWarnings && returnWarnings.size === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No orders currently need a return reminder.
+          </p>
+        ) : displayOrders.length === 0 ? (
+          <OrderTableNoResults
+            searchQuery={deferredSearchQuery}
+            onClearSearch={handleClearSearch}
+          />
         ) : (
           <div
             style={{
@@ -221,6 +252,7 @@ export function OrderTable() {
                 >
                   <OrderCard
                     order={order}
+                    returnWarning={returnWarnings.get(order.id)}
                     isSelected={selectedIds.has(order.id)}
                     hasImageError={imageFailures.has(order.id)}
                     onToggleSelect={toggleSelect}
