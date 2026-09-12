@@ -14,6 +14,7 @@ import { memo, useEffect, useState, type KeyboardEvent } from 'react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
 import { cn } from '@/lib';
 import { getReturnWarningLabel, type ReturnWarning } from '@/utils/returnWarnings';
+import { CopyOrderNumber } from '@/components/CopyOrderNumber';
 import { Card, CardTitle } from './ui/card';
 
 const FALLBACK_COLORS = [
@@ -139,7 +140,7 @@ function OrderCardImpl({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-foreground/80">Order #</span>
-            <span className="font-medium text-foreground">{order.orderNumber}</span>
+            <CopyOrderNumber orderNumber={order.orderNumber} />
           </div>
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-foreground/80">Total</span>
