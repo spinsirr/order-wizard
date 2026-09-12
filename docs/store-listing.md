@@ -63,3 +63,5 @@ English
 - `activeTab` - Access the current tab to inject content scripts
 - `sidePanel` - Display the order management interface in Chrome's side panel
 - `identity` - Handle OAuth authentication for optional cloud sync
+- `alarms` - Check saved order dates hourly for return reminders, including when the side panel is closed
+- `notifications` - Remind you to check return options for orders still awaiting reimbursement

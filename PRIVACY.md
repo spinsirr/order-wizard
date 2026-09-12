@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** January 23, 2026
+**Last updated:** September 11, 2026
 
 ## Overview
 
@@ -39,6 +39,9 @@ Cloud data is:
 - Encrypted in transit (HTTPS)
 - Associated with your user account
 - Deleted upon request
+
+### Return Reminders
+The extension checks saved order dates and reimbursement status locally to show return reminders. It stores the last reminder stage for each affected order on your device to avoid repeated notifications; this reminder history is not synced. Desktop notifications show counts of orders needing attention, without product names, order numbers, or prices. No additional data is collected or sent to a third party for reminders.
 
 ## Data We Do NOT Collect
 

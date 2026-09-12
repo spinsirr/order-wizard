@@ -8,10 +8,12 @@ import {
   ClipboardList,
   Trash2,
   ExternalLink,
+  TriangleAlert,
 } from 'lucide-react';
 import { memo, useEffect, useState, type KeyboardEvent } from 'react';
 import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
 import { cn } from '@/lib';
+import { getReturnWarningLabel, type ReturnWarning } from '@/utils/returnWarnings';
 import { Card, CardTitle } from './ui/card';
 
 const FALLBACK_COLORS = [
@@ -76,6 +78,7 @@ const CARD_CONTENT_WIDTH = 'mx-auto w-full max-w-none';
 
 interface OrderCardProps {
   order: Order;
+  returnWarning?: ReturnWarning;
   isSelected: boolean;
   hasImageError: boolean;
   onToggleSelect: (orderId: string) => void;
@@ -87,6 +90,7 @@ interface OrderCardProps {
 
 function OrderCardImpl({
   order,
+  returnWarning,
   isSelected,
   hasImageError,
   onToggleSelect,
@@ -131,12 +135,7 @@ function OrderCardImpl({
           : 'hover:shadow-[0_10px_20px_rgba(15,23,42,0.12)]',
       )}
     >
-      <div
-        className={cn(
-          CARD_CONTENT_WIDTH,
-          'border-b border-border bg-muted/60 px-6 py-3',
-        )}
-      >
+      <div className={cn(CARD_CONTENT_WIDTH, 'border-b border-border bg-muted/60 px-6 py-3')}>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-foreground/80">Order #</span>
@@ -191,15 +190,13 @@ function OrderCardImpl({
                 className={cn(
                   'flex h-full w-full items-center justify-center text-2xl font-semibold text-white',
                   getFallbackColor(
-                    (order.productName || order.orderNumber || order.id || '').trim() ||
-                      order.id,
+                    (order.productName || order.orderNumber || order.id || '').trim() || order.id,
                   ),
                 )}
                 aria-hidden="true"
               >
                 {(
-                  (order.productName?.trim() || order.orderNumber?.trim() || 'U')[0] ||
-                  'U'
+                  (order.productName?.trim() || order.orderNumber?.trim() || 'U')[0] || 'U'
                 ).toUpperCase()}
               </div>
             )}
@@ -214,8 +211,7 @@ function OrderCardImpl({
           <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <div className="flex items-center gap-1.5">
               {STATUS_SEQUENCE.map((statusOption) => {
-                const { Icon, activeButtonClass, activeIconClass } =
-                  statusConfig[statusOption];
+                const { Icon, activeButtonClass, activeIconClass } = statusConfig[statusOption];
                 const isActive = statusOption === order.status;
                 return (
                   <button
@@ -246,12 +242,45 @@ function OrderCardImpl({
                 );
               })}
             </div>
-            <span className="text-[11px] text-muted-foreground/80">
-              Placed {order.orderDate}
-            </span>
+            <span className="text-[11px] text-muted-foreground/80">Placed {order.orderDate}</span>
           </div>
         </div>
       </div>
+      {returnWarning && (
+        <div className="mx-6 mb-4 flex items-start gap-2 border-t border-border pt-3 text-xs">
+          <TriangleAlert
+            aria-hidden="true"
+            className={cn(
+              'mt-0.5 h-4 w-4 shrink-0',
+              returnWarning.stage === 'warning'
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-destructive',
+            )}
+          />
+          <div className="min-w-0">
+            <p
+              className={cn('font-medium', returnWarning.stage === 'overdue' && 'text-destructive')}
+            >
+              {getReturnWarningLabel(returnWarning)}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Not reimbursed · estimated from order date.
+            </p>
+            <a
+              href={`https://www.amazon.com/spr/returns/cart?orderId=${encodeURIComponent(order.orderNumber.replace(/\s+/g, ''))}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open this order in Amazon's Returns Center"
+              className="mt-2 inline-flex min-h-8 items-center gap-2 rounded-full border border-border px-4 py-2 font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Start return <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+            <p className="mt-1 text-muted-foreground">
+              Choose items, reason, and return method on Amazon.
+            </p>
+          </div>
+        </div>
+      )}
       <div className={cn(CARD_CONTENT_WIDTH, 'px-6 pb-4')}>
         <div className="flex min-w-0 items-center gap-2">
           <input
