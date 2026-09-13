@@ -1,28 +1,44 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAuthorizationUrl, revokeRefreshToken } from '../config/oauth';
+import { buildAuthorizationUrl, createAuthorizationUrl, revokeRefreshToken } from '../config/oauth';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('Cognito authorization URL', () => {
+  it('uses the bundled production public-client configuration without a local .env file', () => {
+    vi.stubGlobal('chrome', {
+      identity: {
+        getRedirectURL: vi.fn(() => 'https://kfohphllanmaojigofaoedibjbcdlhmj.chromiumapp.org/'),
+      },
+    });
+
+    const url = buildAuthorizationUrl('challenge', 'state-123');
+
+    expect(url.origin).toBe('https://us-west-1omca6h5mu.auth.us-west-1.amazoncognito.com');
+    expect(url.searchParams.get('client_id')).toBe('2g61sgjultqdm7n9j2lusopfpd');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'https://kfohphllanmaojigofaoedibjbcdlhmj.chromiumapp.org/',
+    );
+  });
+
   it('binds the access token to the API and requests exact extension scopes', () => {
     const url = createAuthorizationUrl({
       authorizationEndpoint: 'https://auth.example.com/oauth2/authorize',
       clientId: 'extension-client',
       redirectUri: 'https://extension.example/callback',
-      resourceUri: 'https://api.orderwizard.example',
+      resourceUri: 'https://api.ordercue.example',
       codeChallenge: 'challenge',
       state: 'state-123',
     });
 
-    expect(url.searchParams.get('resource')).toBe('https://api.orderwizard.example');
+    expect(url.searchParams.get('resource')).toBe('https://api.ordercue.example');
     expect(url.searchParams.get('state')).toBe('state-123');
     expect(url.searchParams.get('scope')).toBe(
-      'openid email https://api.orderwizard.example/orders.read ' +
-        'https://api.orderwizard.example/orders.sync ' +
-        'https://api.orderwizard.example/orders.status.write ' +
-        'https://api.orderwizard.example/orders.note.write',
+      'openid email https://api.ordercue.example/orders.read ' +
+        'https://api.ordercue.example/orders.sync ' +
+        'https://api.ordercue.example/orders.status.write ' +
+        'https://api.ordercue.example/orders.note.write',
     );
   });
 

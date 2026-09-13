@@ -41,7 +41,7 @@ export default defineContentScript({
       }
     }
 
-    console.log('Amazon Order Wizard content script loaded');
+    console.log('OrderCue content script loaded');
 
     injectSaveButtons(handleSaveClick);
     setupMutationObserver(handleSaveClick);

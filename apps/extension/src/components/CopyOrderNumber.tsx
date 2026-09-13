@@ -25,9 +25,9 @@ export function CopyOrderNumber({ orderNumber }: { orderNumber: string }) {
     <span className="relative z-20 inline-flex min-w-0 flex-col items-start">
       <Button
         type="button"
-        variant="text"
+        variant="ghost"
         size="sm"
-        className="h-8 min-w-0 gap-1.5 rounded px-1 py-0 text-xs font-medium tracking-normal text-foreground"
+        className="h-8 min-w-0 gap-1.5 rounded px-1 py-0 font-mono text-micro font-medium tracking-normal text-muted-foreground"
         aria-label={`Copy order number ${orderNumber}`}
         title={status === 'copied' ? 'Copied!' : 'Copy order number'}
         onClick={(event) => {
@@ -42,7 +42,9 @@ export function CopyOrderNumber({ orderNumber }: { orderNumber: string }) {
           <Copy className="size-3 shrink-0" aria-hidden="true" />
         )}
       </Button>
-      <output className={status === 'error' ? 'text-xs text-destructive' : 'sr-only'}>
+      <output
+        className={status === 'error' ? 'text-micro normal-case text-destructive' : 'sr-only'}
+      >
         {status === 'copied' && 'Order number copied'}
         {status === 'error' && 'Copy failed. Try again.'}
       </output>

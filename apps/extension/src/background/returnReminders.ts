@@ -35,8 +35,8 @@ export async function checkReturnReminders(now = new Date()): Promise<void> {
   await chrome.action.setTitle({
     title:
       count === 0
-        ? 'Open Order Wizard'
-        : `Order Wizard · ${count} return ${count === 1 ? 'reminder' : 'reminders'}`,
+        ? 'Open OrderCue'
+        : `OrderCue · ${count} return ${count === 1 ? 'reminder' : 'reminders'}`,
   });
 
   const hasNewStage = Object.entries(current).some(([id, stage]) => previous[id] !== stage);
@@ -58,7 +58,7 @@ export async function checkReturnReminders(now = new Date()): Promise<void> {
           : urgentCount > 0
             ? 'Return check urgent — nearing 30 days'
             : 'Reimbursement missing — consider a return',
-      message: `${count} ${count === 1 ? 'order has' : 'orders have'} not been reimbursed after 25+ days.${overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Open Order Wizard and confirm the return deadline on Amazon.`,
+      message: `${count} ${count === 1 ? 'order has' : 'orders have'} not been reimbursed after 25+ days.${overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Open OrderCue and confirm the return deadline on Amazon.`,
       priority: overdueCount + urgentCount > 0 ? 2 : 1,
     });
   }
@@ -76,7 +76,7 @@ export function initializeReturnReminders(): void {
     pendingCheck = pendingCheck
       .then(() => checkReturnReminders())
       .catch((error: unknown) => {
-        console.error('Order Wizard return reminder check failed:', error);
+        console.error('OrderCue return reminder check failed:', error);
       });
     return pendingCheck;
   };

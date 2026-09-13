@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SyncProvider } from '@/contexts/SyncContext';
 import './index.css';
@@ -30,5 +32,5 @@ createRoot(rootElement).render(
         </SyncProvider>
       </AuthProvider>
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );

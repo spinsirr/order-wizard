@@ -1,4 +1,15 @@
-import { Button } from './ui/button';
+import { TriangleAlert } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 export type ConfirmData =
   | { type: 'single'; orderId: string; message: string }
@@ -18,33 +29,41 @@ export function DeleteConfirmModal({
   onCancel,
 }: DeleteConfirmModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <h3 className="text-lg font-semibold text-foreground">{confirmData.message}</h3>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {confirmData.type === 'bulk'
-            ? 'This action cannot be undone and will remove all selected orders from your list.'
-            : 'This action cannot be undone and will remove the order from your list.'}
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            disabled={isDeleting}
-          >
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isDeleting) onCancel();
+      }}
+    >
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogMedia className="size-10 border border-destructive/20 bg-destructive/10 text-destructive">
+            <TriangleAlert className="size-5" aria-hidden="true" />
+          </AlertDialogMedia>
+          <AlertDialogTitle>{confirmData.message}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {confirmData.type === 'bulk'
+              ? 'This action cannot be undone and will remove all selected orders from your list.'
+              : 'This action cannot be undone and will remove the order from your list.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel variant="outline" size="sm" disabled={isDeleting}>
             Cancel
-          </Button>
-          <Button
+          </AlertDialogCancel>
+          <AlertDialogAction
             variant="destructive"
             size="sm"
-            onClick={onConfirm}
             disabled={isDeleting}
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
           >
             {isDeleting ? 'Deleting…' : 'Delete'}
-          </Button>
-        </div>
-      </div>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

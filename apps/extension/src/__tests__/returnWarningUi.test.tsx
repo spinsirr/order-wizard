@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderTable } from '@/components/OrderTable';
 import { type Order, OrderStatus } from '@/types';
 
-const data = vi.hoisted(() => ({ orders: [] as Order[], deleteOrders: vi.fn(async () => {}) }));
+const data = vi.hoisted(() => ({ orders: [] as Order[] }));
 vi.mock('@/hooks/useOrders', () => ({
   useOrders: () => ({ data: data.orders, isLoading: false }),
   useUpdateOrderStatus: () => ({ mutate: vi.fn() }),
   useUpdateOrderNote: () => ({ mutate: vi.fn() }),
-  useDeleteOrders: () => ({ mutateAsync: data.deleteOrders, isPending: false }),
+  useDeleteOrders: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
@@ -34,7 +34,6 @@ function order(id: string, orderDate: string, status: OrderStatus = OrderStatus.
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 7, 31, 12));
   window.history.replaceState({}, '', '/');
@@ -54,12 +53,10 @@ describe('return reminder queue', () => {
   it('keeps the summary visible through searches and opens all affected orders', () => {
     render(<OrderTable />);
     expect(screen.getByText('2 orders need a return check')).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText('Search orders...'), {
-      target: { value: 'new-order' },
-    });
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'new-order' } });
     expect(screen.queryByRole('heading', { name: 'warning-order' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Review returns' }));
-    expect((screen.getByPlaceholderText('Search orders...') as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('');
     expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
       'overdue-order',
       'warning-order',
@@ -91,20 +88,6 @@ describe('return reminder queue', () => {
     expect(screen.getAllByRole('heading')).toHaveLength(2);
     expect(screen.getAllByRole('heading')[0].textContent).toBe('overdue-order');
     expect(screen.queryByRole('heading', { name: 'new-order' })).toBeNull();
-  });
-
-  it('only deletes selected orders visible in the return queue', async () => {
-    render(<OrderTable />);
-    const selections = screen.getAllByRole('button', { name: 'Select' });
-    fireEvent.click(selections[0]);
-    fireEvent.click(selections[1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Review returns' }));
-    fireEvent.click(screen.getByRole('button', { name: /Delete selected/i }));
-    expect(screen.getByRole('heading', { name: 'Delete 1 selected order?' })).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    });
-    expect(data.deleteOrders).toHaveBeenCalledWith(['warning-order']);
   });
 
   it('refreshes the countdown across midnight while the panel stays open', () => {

@@ -4,12 +4,12 @@
 
 ## Overview
 
-Amazon Order Wizard ("the Extension") is a browser extension that helps users save and manage their Amazon orders. This privacy policy explains how we collect, use, and protect your data.
+OrderCue ("the Extension") is a browser extension that helps users save and manage their Amazon orders. This privacy policy explains how we collect, use, and protect your data.
 
 ## Data We Collect
 
 ### Order Data
-When you click "Save to Wizard" on an Amazon order, we collect:
+When you click "Save to OrderCue" on an Amazon order, we collect:
 - Order number
 - Product name
 - Order date
@@ -105,4 +105,6 @@ https://github.com/spinsirr/order-wizard/issues
 
 ## Consent
 
-By using Amazon Order Wizard, you consent to this privacy policy.
+By using OrderCue, you consent to this privacy policy.
+
+OrderCue is an independent product and is not affiliated with or endorsed by Amazon.

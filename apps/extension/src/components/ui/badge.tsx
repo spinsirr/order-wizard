@@ -1,39 +1,46 @@
-import * as React from 'react';
-import { cn } from '@/lib';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { Slot } from 'radix-ui';
+import type * as React from 'react';
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'info' | 'destructive' | 'outline';
+import { cn } from '@/lib/index';
 
-const variantStyles: Record<BadgeVariant, string> = {
-  default:
-    'bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 dark:bg-primary/20 dark:text-primary-foreground',
-  success:
-    'bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/30 dark:bg-emerald-500/25 dark:text-emerald-200',
-  warning:
-    'bg-amber-500/15 text-amber-600 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-500/25 dark:text-amber-100',
-  info: 'bg-sky-500/15 text-sky-600 ring-1 ring-inset ring-sky-500/25 dark:bg-sky-500/25 dark:text-sky-200',
-  destructive:
-    'bg-destructive/15 text-destructive ring-1 ring-inset ring-destructive/25 dark:bg-destructive/25 dark:text-destructive-foreground',
-  outline:
-    'bg-transparent text-foreground ring-1 ring-inset ring-border/80 dark:text-foreground dark:ring-border/40',
-};
+const badgeVariants = cva(
+  'inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-caption font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3',
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground [a&]:hover:bg-primary/90',
+        secondary: 'bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90',
+        destructive:
+          'bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90',
+        outline:
+          'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
+        ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 [a&]:hover:underline',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+);
 
-interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: BadgeVariant;
-}
+function Badge({
+  className,
+  variant = 'default',
+  asChild = false,
+  ...props
+}: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : 'span';
 
-const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ className, variant = 'default', ...props }, ref) => (
-    <span
-      ref={ref}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide transition-colors duration-200',
-        variantStyles[variant],
-        className,
-      )}
+  return (
+    <Comp
+      data-slot="badge"
+      data-variant={variant}
+      className={cn(badgeVariants({ variant }), className)}
       {...props}
     />
-  ),
-);
-Badge.displayName = 'Badge';
+  );
+}
 
-export { Badge, type BadgeVariant };
+export { Badge, badgeVariants };

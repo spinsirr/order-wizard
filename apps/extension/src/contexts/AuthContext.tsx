@@ -1,11 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import * as oauth from 'oauth4webapi';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { apiRepository } from '@/config';
 import {
   authorizationServer,
-  oauthClient,
   buildAuthorizationUrl,
   buildLogoutUrl,
+  oauthClient,
   revokeRefreshToken,
 } from '@/config/oauth';
 import { AUTH_STORAGE_KEY, CURRENT_USER_STORAGE_KEY } from '@/constants';
@@ -19,8 +19,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   user: AuthUser | null;
   error: Error | null;
-  signIn: () => void;
-  signOut: () => void;
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -73,39 +73,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [accessToken]);
 
   // Refresh token using refresh_token grant
-  const refreshAccessToken = useCallback(async (currentUser: AuthUser): Promise<AuthUser | null> => {
-    if (!currentUser.refresh_token) {
-      return null;
-    }
+  const refreshAccessToken = useCallback(
+    async (currentUser: AuthUser): Promise<AuthUser | null> => {
+      if (!currentUser.refresh_token) {
+        return null;
+      }
 
-    try {
-      const response = await oauth.refreshTokenGrantRequest(
-        authorizationServer,
-        oauthClient,
-        oauth.None(),
-        currentUser.refresh_token
-      );
+      try {
+        const response = await oauth.refreshTokenGrantRequest(
+          authorizationServer,
+          oauthClient,
+          oauth.None(),
+          currentUser.refresh_token,
+        );
 
-      const result = await oauth.processRefreshTokenResponse(
-        authorizationServer,
-        oauthClient,
-        response
-      );
+        const result = await oauth.processRefreshTokenResponse(
+          authorizationServer,
+          oauthClient,
+          response,
+        );
 
-      const newUser: AuthUser = {
-        ...currentUser,
-        access_token: result.access_token,
-        id_token: result.id_token ?? currentUser.id_token,
-        refresh_token: result.refresh_token ?? currentUser.refresh_token,
-        expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
-      };
+        const newUser: AuthUser = {
+          ...currentUser,
+          access_token: result.access_token,
+          id_token: result.id_token ?? currentUser.id_token,
+          refresh_token: result.refresh_token ?? currentUser.refresh_token,
+          expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
+        };
 
-      await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
-      return newUser;
-    } catch {
-      return null;
-    }
-  }, []);
+        await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
+        return newUser;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
 
   // Initialize from storage and handle token refresh
   useEffect(() => {
@@ -169,70 +172,75 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [user, refreshAccessToken, clearAuth]);
 
   const signIn = useCallback(async () => {
-    const redirectUri = chrome.identity.getRedirectURL();
-    const codeVerifier = oauth.generateRandomCodeVerifier();
-    const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
-    const state = oauth.generateRandomState();
-    const authUrl = buildAuthorizationUrl(codeChallenge, state);
-
     setIsLoading(true);
     setError(null);
 
-    chrome.identity.launchWebAuthFlow(
-      { url: authUrl.href, interactive: true },
-      async (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
-          setIsLoading(false);
-          setError(new Error(chrome.runtime.lastError?.message || 'Auth failed'));
-          return;
-        }
+    try {
+      const redirectUri = chrome.identity.getRedirectURL();
+      const codeVerifier = oauth.generateRandomCodeVerifier();
+      const codeChallenge = await oauth.calculatePKCECodeChallenge(codeVerifier);
+      const state = oauth.generateRandomState();
+      const authUrl = buildAuthorizationUrl(codeChallenge, state);
 
-        try {
-          const callbackParams = oauth.validateAuthResponse(
-            authorizationServer,
-            oauthClient,
-            new URL(responseUrl),
-            state
-          );
-
-          const response = await oauth.authorizationCodeGrantRequest(
-            authorizationServer,
-            oauthClient,
-            oauth.None(),
-            callbackParams,
-            redirectUri,
-            codeVerifier
-          );
-
-          const result = await oauth.processAuthorizationCodeResponse(
-            authorizationServer,
-            oauthClient,
-            response
-          );
-
-          const claims = oauth.getValidatedIdTokenClaims(result);
-          if (!claims || !result.id_token) {
-            throw new Error('Missing ID token claims');
+      chrome.identity.launchWebAuthFlow(
+        { url: authUrl.href, interactive: true },
+        async (responseUrl) => {
+          if (chrome.runtime.lastError || !responseUrl) {
+            setIsLoading(false);
+            setError(new Error(chrome.runtime.lastError?.message || 'Auth failed'));
+            return;
           }
 
-          const newUser: AuthUser = {
-            sub: claims.sub,
-            email: claims.email as string | undefined,
-            access_token: result.access_token,
-            id_token: result.id_token,
-            refresh_token: result.refresh_token,
-            expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
-          };
+          try {
+            const callbackParams = oauth.validateAuthResponse(
+              authorizationServer,
+              oauthClient,
+              new URL(responseUrl),
+              state,
+            );
 
-          await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
-          setAuthenticatedUser(newUser);
-          setIsLoading(false);
-        } catch (err) {
-          setIsLoading(false);
-          setError(err instanceof Error ? err : new Error('Token exchange failed'));
-        }
-      }
-    );
+            const response = await oauth.authorizationCodeGrantRequest(
+              authorizationServer,
+              oauthClient,
+              oauth.None(),
+              callbackParams,
+              redirectUri,
+              codeVerifier,
+            );
+
+            const result = await oauth.processAuthorizationCodeResponse(
+              authorizationServer,
+              oauthClient,
+              response,
+            );
+
+            const claims = oauth.getValidatedIdTokenClaims(result);
+            if (!claims || !result.id_token) {
+              throw new Error('Missing ID token claims');
+            }
+
+            const newUser: AuthUser = {
+              sub: claims.sub,
+              email: claims.email as string | undefined,
+              access_token: result.access_token,
+              id_token: result.id_token,
+              refresh_token: result.refresh_token,
+              expires_at: Date.now() + (result.expires_in ?? 3600) * 1000,
+            };
+
+            await chrome.storage.local.set({ [AUTH_STORAGE_KEY]: newUser });
+            setAuthenticatedUser(newUser);
+            setIsLoading(false);
+          } catch (err) {
+            setIsLoading(false);
+            setError(err instanceof Error ? err : new Error('Token exchange failed'));
+          }
+        },
+      );
+    } catch (err) {
+      setIsLoading(false);
+      setError(err instanceof Error ? err : new Error('Unable to start sign in'));
+    }
   }, [setAuthenticatedUser]);
 
   const signOut = useCallback(async () => {
@@ -246,12 +254,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     clearAuth();
-    chrome.identity.launchWebAuthFlow(
-      { url: buildLogoutUrl(), interactive: false },
-      () => {
-        // Ignore errors on logout
-      }
-    );
+    chrome.identity.launchWebAuthFlow({ url: buildLogoutUrl(), interactive: false }, () => {
+      // Ignore errors on logout
+    });
   }, [clearAuth, user?.refresh_token]);
 
   const value: AuthContextValue = {

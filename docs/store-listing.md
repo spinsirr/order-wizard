@@ -1,49 +1,46 @@
 # Chrome Web Store Listing
 
 ## Title
-Amazon Order Wizard
+OrderCue
 
 ## Summary
-Track Amazon orders and list them on Facebook Marketplace
+Manage and track your Amazon orders
 
 ## Description
 
-Amazon Order Wizard makes it easy to track Amazon orders and list them on Facebook Marketplace.
+OrderCue keeps the purchases you want to revisit in one focused Chrome side panel.
 
-WHY USE IT?
-Ever bought something on Amazon, needed to return it later, but couldn't find the order? Or wanted to track which orders you've commented on or gotten refunds for? Amazon Order Wizard solves this by letting you save and organize orders with a simple workflow.
+SAVE FROM AMAZON
 
-KEY FEATURES
+Capture an order directly from Amazon Order History without retyping product details, order numbers, prices, or links.
 
-🔖 One-Click Save
-Save orders directly from your Amazon order history page. Just click the "Save" button next to any order.
+STAY ORGANIZED
 
-📊 Status Tracking
-Track each order through your workflow:
-Uncommented → Commented → Comment Revealed → Reimbursed
+- Move each order through Pending, Commented, Revealed, and Reimbursed.
+- Add a note for the next action or anything you want to remember.
+- Search by product, order number, or note, then filter and sort the queue.
+- Select orders with the mouse or keyboard and export your data when needed.
+- Click an order number to copy it.
+- Get return reminders for unreimbursed orders at 25, 28, and 30 days after ordering, with a toolbar badge and desktop alerts. Check the actual return deadline on Amazon.
 
-📝 Personal Notes
-Add notes to remember why you saved an order or any important details.
+RETURN TO THE SOURCE
 
-🔍 Search & Filter
-Quickly find orders by product name, order number, or filter by status.
+Open the original Amazon order in one click. When you are ready to resell, use the Facebook Marketplace workflow to prepare a listing from the saved product details.
 
-🛒 Facebook Marketplace Integration
-Quickly list your Amazon purchases on Facebook Marketplace. Auto-fills product details, price, and images - just review and post.
+LOCAL-FIRST, WITH OPTIONAL SYNC
 
-☁️ Cloud Sync (Optional)
-Sign in to sync your orders across devices. Works completely offline without an account - your data stays local until you choose to sync.
+The extension works without an account and keeps changes in your browser by default. Sign in only if you want to sync your order queue across devices.
 
 HOW TO USE
 
 1. Go to your Amazon Order History page
-2. Click "Save to Wizard" on any order you want to track
+2. Click "Save to OrderCue" on any order you want to track
 3. Open the extension from Chrome's side panel to view and manage your orders
-4. Update status as you go: Uncommented → Commented → Comment Revealed → Reimbursed
-5. Want to resell? Click "List on Facebook" to auto-fill a Marketplace listing
+4. Update its status, add a note, or jump back to the original order
 
-PRIVACY
-Your order data is stored locally on your device. Cloud sync is optional and only activates when you sign in.
+OrderCue is designed for a small, calm workflow: save what matters, see what needs attention, and finish the task where it belongs.
+
+OrderCue is an independent product and is not affiliated with or endorsed by Amazon.
 
 ## Category
 Tools

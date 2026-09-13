@@ -1,11 +1,11 @@
 import { LocalStorageRepository } from './LocalStorageRepository';
 import { ApiRepository } from './ApiRepository';
+import { apiBaseUrl } from '@/config/env';
 
 export { LocalStorageRepository } from './LocalStorageRepository';
 export { ApiRepository } from './ApiRepository';
 
-// Environment config
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+export { apiBaseUrl } from '@/config/env';
 
 // Repository instances
 export const localRepository = new LocalStorageRepository();

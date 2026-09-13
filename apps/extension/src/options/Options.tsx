@@ -1,14 +1,30 @@
 import { useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
 import { getTemplate, saveTemplate } from '@/lib';
 import {
   DEFAULT_TEMPLATE,
-  FB_CONDITION_LABELS,
   FB_CATEGORY_LABELS,
-  PRICE_ROUNDING_LABELS,
-  type FBCondition,
+  FB_CONDITION_LABELS,
   type FBCategory,
-  type PriceRounding,
+  type FBCondition,
   type FBListingTemplate,
+  PRICE_ROUNDING_LABELS,
+  type PriceRounding,
 } from '@/types';
 
 export function Options() {
@@ -17,8 +33,8 @@ export function Options() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getTemplate().then((t) => {
-      setTemplate(t);
+    getTemplate().then((nextTemplate) => {
+      setTemplate(nextTemplate);
       setLoading(false);
     });
   }, []);
@@ -29,209 +45,181 @@ export function Options() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleReset = () => {
-    setTemplate(DEFAULT_TEMPLATE);
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
-      </div>
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 bg-background px-4 py-8">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-[520px] w-full rounded-xl" />
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          Amazon Order Wizard Settings
-        </h1>
+    <main className="min-h-screen bg-background px-4 py-8 text-foreground">
+      <div className="mx-auto max-w-2xl">
+        <p className="font-mono text-caption uppercase tracking-[0.12em] text-muted-foreground">
+          OrderCue / Settings
+        </p>
+        <h1 className="mt-2 text-heading font-semibold tracking-tight">Marketplace defaults</h1>
 
-        <div className="bg-white rounded-lg shadow p-6 space-y-6">
-          <h2 className="text-lg font-semibold text-gray-800 border-b pb-2">
-            Facebook Marketplace Listing Template
-          </h2>
+        <Card className="mt-6 gap-0 shadow-none">
+          <CardHeader className="border-b">
+            <CardTitle>Facebook Marketplace listing</CardTitle>
+            <CardDescription>
+              Set the defaults used when OrderCue prepares a listing draft.
+            </CardDescription>
+          </CardHeader>
 
-          {/* Discount Percent */}
-          <div>
-            <label
-              htmlFor="discountPercent"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Selling Price (% of original): {template.discountPercent}%
-            </label>
-            <input
-              type="range"
-              id="discountPercent"
-              min="10"
-              max="100"
-              step="5"
-              value={template.discountPercent}
-              onChange={(e) =>
-                setTemplate({ ...template, discountPercent: Number(e.target.value) })
-              }
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>10%</span>
-              <span>100%</span>
+          <CardContent className="space-y-6 pt-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="discountPercent">Selling price</Label>
+                <span className="font-mono text-caption text-muted-foreground">
+                  {template.discountPercent}% of original
+                </span>
+              </div>
+              <Slider
+                id="discountPercent"
+                min={10}
+                max={100}
+                step={5}
+                value={[template.discountPercent]}
+                onValueChange={([value]) => {
+                  if (value !== undefined) setTemplate({ ...template, discountPercent: value });
+                }}
+                aria-label="Selling price percentage"
+              />
+              <div className="flex justify-between font-mono text-caption text-muted-foreground">
+                <span>10%</span>
+                <span>100%</span>
+              </div>
             </div>
-          </div>
 
-          {/* Price Rounding */}
-          <div>
-            <label
-              htmlFor="priceRounding"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Price Rounding
-            </label>
-            <select
-              id="priceRounding"
-              value={template.priceRounding}
-              onChange={(e) =>
-                setTemplate({ ...template, priceRounding: e.target.value as PriceRounding })
-              }
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(PRICE_ROUNDING_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="priceRounding">Price rounding</Label>
+              <Select
+                value={template.priceRounding}
+                onValueChange={(value) =>
+                  setTemplate({ ...template, priceRounding: value as PriceRounding })
+                }
+              >
+                <SelectTrigger id="priceRounding" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRICE_ROUNDING_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Condition */}
-          <div>
-            <label
-              htmlFor="condition"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Default Condition
-            </label>
-            <select
-              id="condition"
-              value={template.condition}
-              onChange={(e) =>
-                setTemplate({ ...template, condition: e.target.value as FBCondition })
-              }
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(FB_CONDITION_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="condition">Default condition</Label>
+                <Select
+                  value={template.condition}
+                  onValueChange={(value) =>
+                    setTemplate({ ...template, condition: value as FBCondition })
+                  }
+                >
+                  <SelectTrigger id="condition" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(FB_CONDITION_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* Category */}
-          <div>
-            <label
-              htmlFor="category"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Default Category
-            </label>
-            <select
-              id="category"
-              value={template.category}
-              onChange={(e) =>
-                setTemplate({ ...template, category: e.target.value as FBCategory })
-              }
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(FB_CATEGORY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Default category</Label>
+                <Select
+                  value={template.category}
+                  onValueChange={(value) =>
+                    setTemplate({ ...template, category: value as FBCategory })
+                  }
+                >
+                  <SelectTrigger id="category" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(FB_CATEGORY_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          {/* Pickup Location */}
-          <div>
-            <label
-              htmlFor="pickupLocation"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Pickup Location
-            </label>
-            <input
-              type="text"
-              id="pickupLocation"
-              value={template.pickupLocation}
-              onChange={(e) =>
-                setTemplate({ ...template, pickupLocation: e.target.value })
-              }
-              placeholder="e.g., Downtown Seattle"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="pickupLocation">Pickup location</Label>
+              <Input
+                id="pickupLocation"
+                value={template.pickupLocation}
+                onChange={(event) =>
+                  setTemplate({ ...template, pickupLocation: event.target.value })
+                }
+                placeholder="e.g., Downtown Seattle"
+              />
+            </div>
 
-          {/* Include Order Link */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="includeOrderLink"
-              checked={template.includeOrderLink}
-              onChange={(e) =>
-                setTemplate({ ...template, includeOrderLink: e.target.checked })
-              }
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="includeOrderLink" className="text-sm text-gray-700">
-              Include Amazon order link in description
-            </label>
-          </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="includeOrderLink"
+                checked={template.includeOrderLink}
+                onCheckedChange={(checked) =>
+                  setTemplate({ ...template, includeOrderLink: checked === true })
+                }
+              />
+              <Label htmlFor="includeOrderLink">Include Amazon order link in description</Label>
+            </div>
 
-          {/* Description Template */}
-          <div>
-            <label
-              htmlFor="descriptionTemplate"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Description Template
-            </label>
-            <textarea
-              id="descriptionTemplate"
-              value={template.descriptionTemplate}
-              onChange={(e) =>
-                setTemplate({ ...template, descriptionTemplate: e.target.value })
-              }
-              rows={8}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Available placeholders: {'{productName}'}, {'{productDescription}'},{' '}
-              {'{originalPrice}'}, {'{sellingPrice}'}, {'{orderDate}'}, {'{condition}'}
-            </p>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="descriptionTemplate">Description template</Label>
+              <Textarea
+                id="descriptionTemplate"
+                value={template.descriptionTemplate}
+                onChange={(event) =>
+                  setTemplate({ ...template, descriptionTemplate: event.target.value })
+                }
+                rows={8}
+                className="font-mono text-body"
+              />
+              <p className="text-caption leading-5 text-muted-foreground">
+                Available placeholders: {'{productName}'}, {'{productDescription}'},{' '}
+                {'{originalPrice}'}, {'{sellingPrice}'}, {'{orderDate}'}, {'{condition}'}
+              </p>
+            </div>
 
-          {/* Buttons */}
-          <div className="flex items-center gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Save Settings
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-            >
-              Reset to Default
-            </button>
-            {saved && (
-              <span className="text-green-600 text-sm font-medium">Saved!</span>
-            )}
-          </div>
-        </div>
+            <div className="flex items-center gap-3 border-t pt-4">
+              <Button type="button" onClick={() => void handleSave()}>
+                Save settings
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setTemplate(DEFAULT_TEMPLATE)}
+              >
+                Reset to default
+              </Button>
+              {saved ? (
+                <Badge variant="secondary" aria-live="polite">
+                  Saved
+                </Badge>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </main>
   );
 }

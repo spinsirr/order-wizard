@@ -1,31 +1,33 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   BadgeCheck,
-  CheckCircle2,
-  Circle,
+  Check,
+  ClipboardList,
+  ExternalLink,
   Eye,
   MessageCircle,
-  ClipboardList,
+  StickyNote,
   Trash2,
-  ExternalLink,
   TriangleAlert,
+  X,
 } from 'lucide-react';
-import { memo, useEffect, useState, type KeyboardEvent } from 'react';
-import { OrderStatus, ORDER_STATUS_LABELS, type Order } from '@/types';
-import { cn } from '@/lib';
-import { getReturnWarningLabel, type ReturnWarning } from '@/utils/returnWarnings';
+import { type KeyboardEvent, memo, useEffect, useState } from 'react';
 import { CopyOrderNumber } from '@/components/CopyOrderNumber';
-import { Card, CardTitle } from './ui/card';
+import { cn } from '@/lib';
+import { ORDER_STATUS_LABELS, type Order, OrderStatus } from '@/types';
+import { getReturnWarningLabel, type ReturnWarning } from '@/utils/returnWarnings';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { Checkbox } from './ui/checkbox';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger } from './ui/select';
 
 const FALLBACK_COLORS = [
-  'bg-indigo-500',
-  'bg-amber-500',
-  'bg-emerald-500',
-  'bg-rose-500',
-  'bg-sky-500',
-  'bg-purple-500',
-  'bg-cyan-500',
-  'bg-fuchsia-500',
+  'bg-neutral-950',
+  'bg-neutral-800',
+  'bg-neutral-700',
+  'bg-neutral-600',
 ] as const;
 
 const hashString = (value: string): number => {
@@ -46,36 +48,43 @@ const statusConfig: Record<
   OrderStatus,
   {
     Icon: LucideIcon;
-    activeButtonClass: string;
-    activeIconClass: string;
+    iconClass: string;
   }
 > = {
   [OrderStatus.Uncommented]: {
     Icon: ClipboardList,
-    activeButtonClass:
-      'bg-indigo-500 text-white border-indigo-500 dark:bg-indigo-400 dark:text-black',
-    activeIconClass: 'text-white dark:text-black',
+    iconClass: 'text-warning',
   },
   [OrderStatus.Commented]: {
     Icon: MessageCircle,
-    activeButtonClass: 'bg-accent text-accent-foreground border-accent',
-    activeIconClass: 'text-accent-foreground',
+    iconClass: 'text-link',
   },
   [OrderStatus.CommentRevealed]: {
     Icon: Eye,
-    activeButtonClass: 'bg-primary text-primary-foreground border-primary',
-    activeIconClass: 'text-primary-foreground',
+    iconClass: 'text-[#7928ca] dark:text-[#b989f5]',
   },
   [OrderStatus.Reimbursed]: {
     Icon: BadgeCheck,
-    activeButtonClass:
-      'bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-400 dark:text-black',
-    activeIconClass: 'text-white dark:text-black',
+    iconClass: 'text-[#0a7f3f] dark:text-[#50e3c2]',
   },
 };
 
 const STATUS_SEQUENCE = Object.values(OrderStatus);
-const CARD_CONTENT_WIDTH = 'mx-auto w-full max-w-none';
+const CARD_STATUS_LABELS = {
+  ...ORDER_STATUS_LABELS,
+  [OrderStatus.Uncommented]: 'Pending',
+  [OrderStatus.CommentRevealed]: 'Revealed',
+};
+
+const getAmazonOrderUrl = (orderNumber: string) => {
+  const sanitized = orderNumber.replace(/\s+/g, '');
+  return `https://www.amazon.com/gp/css/order-details?orderID=${encodeURIComponent(sanitized)}`;
+};
+
+const getAmazonReturnUrl = (orderNumber: string) => {
+  const sanitized = orderNumber.replace(/\s+/g, '');
+  return `https://www.amazon.com/spr/returns/cart?orderId=${encodeURIComponent(sanitized)}`;
+};
 
 interface OrderCardProps {
   order: Order;
@@ -103,16 +112,15 @@ function OrderCardImpl({
   const savedNote = order.note ?? '';
   const [draftNote, setDraftNote] = useState(savedNote);
   const isDirty = draftNote !== savedNote;
+  const orderUrl = getAmazonOrderUrl(order.orderNumber);
+  const { Icon: StatusIcon, iconClass } = statusConfig[order.status];
 
-  // Reconcile local draft when the order's note changes from outside (e.g. sync).
-  // Skip while the user has an uncommitted draft so we don't clobber their typing.
   useEffect(() => {
     if (!isDirty) setDraftNote(savedNote);
   }, [savedNote, isDirty]);
 
   const commitNote = () => {
-    if (!isDirty) return;
-    onNoteSave(order.id, draftNote);
+    if (isDirty) onNoteSave(order.id, draftNote);
   };
 
   const handleNoteKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -128,134 +136,146 @@ function OrderCardImpl({
 
   return (
     <Card
-      elevation={isSelected ? 'high' : 'medium'}
       className={cn(
-        'relative flex h-full w-full flex-col overflow-hidden border border-border bg-card text-foreground shadow-sm transition-shadow duration-200',
+        'relative w-full gap-0 overflow-hidden bg-card px-3 py-2.5 text-foreground shadow-none transition-[border-color,background-color,box-shadow,transform] duration-150 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-sm',
         isSelected
-          ? 'ring-2 ring-primary/40 shadow-lg'
-          : 'hover:shadow-[0_10px_20px_rgba(15,23,42,0.12)]',
+          ? 'border-link/55 ring-2 ring-link/12'
+          : 'hover:border-foreground/20 hover:bg-secondary/25',
       )}
     >
-      <div className={cn(CARD_CONTENT_WIDTH, 'border-b border-border bg-muted/60 px-6 py-3')}>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-foreground/80">Order #</span>
-            <CopyOrderNumber orderNumber={order.orderNumber} />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-foreground/80">Total</span>
-            <span className="font-medium text-foreground">{order.price}</span>
-          </div>
-          <button
-            type="button"
-            className="ml-auto flex items-center gap-2 text-[11px] font-medium normal-case text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            aria-pressed={isSelected}
-            onClick={() => onToggleSelect(order.id)}
-          >
-            <span
+      <Button
+        type="button"
+        variant="ghost"
+        aria-label={
+          isSelected ? `Deselect order ${order.orderNumber}` : `Select order ${order.orderNumber}`
+        }
+        title={isSelected ? 'Deselect order' : 'Select order'}
+        aria-pressed={isSelected}
+        onClick={() => onToggleSelect(order.id)}
+        className="absolute inset-0 z-10 h-auto w-auto rounded-[inherit] p-0 hover:bg-transparent focus-visible:ring-2 focus-visible:ring-link/60 focus-visible:ring-inset active:scale-100"
+      >
+        <span className="sr-only">{isSelected ? 'Deselect' : 'Select'} this order</span>
+      </Button>
+
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5 font-mono text-micro font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <span className="shrink-0">Order</span>
+          <CopyOrderNumber orderNumber={order.orderNumber} />
+          <span className="text-border" aria-hidden="true">
+            ·
+          </span>
+          <span className="shrink-0 normal-case tracking-normal">{order.orderDate}</span>
+        </div>
+        <Checkbox
+          checked={isSelected}
+          tabIndex={-1}
+          aria-hidden="true"
+          onCheckedChange={() => onToggleSelect(order.id)}
+          className="relative z-20 size-5 rounded-md"
+        />
+      </div>
+
+      <div className="mt-2 flex min-w-0 gap-2.5">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white">
+          {order.productImage && !hasImageError ? (
+            <img
+              src={order.productImage}
+              alt={order.productName}
+              width={64}
+              height={64}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-contain p-1.5"
+              onError={() => onImageError(order.id)}
+            />
+          ) : (
+            <div
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-full border transition',
-                isSelected
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border bg-muted text-muted-foreground',
+                'flex h-full w-full items-center justify-center text-heading font-semibold text-white',
+                getFallbackColor(
+                  (order.productName || order.orderNumber || order.id || '').trim() || order.id,
+                ),
               )}
+              aria-hidden="true"
             >
-              {isSelected ? (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Circle className="h-4 w-4" aria-hidden="true" />
-              )}
+              {(
+                (order.productName?.trim() || order.orderNumber?.trim() || 'O')[0] || 'O'
+              ).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
+          <h2 className="line-clamp-2 text-body font-semibold text-foreground">
+            {order.productName}
+          </h2>
+
+          <div className="flex min-w-0 items-end justify-between gap-2">
+            <span className="shrink-0 font-mono text-body font-medium leading-none text-foreground">
+              {order.price}
             </span>
-            Select
-          </button>
+
+            <div className="relative z-20 flex shrink-0 items-center gap-0.5">
+              <Select
+                value={order.status}
+                onValueChange={(value) => onStatusChange(order.id, value as OrderStatus)}
+              >
+                <SelectTrigger
+                  size="sm"
+                  aria-label={`Status for ${order.productName}`}
+                  title={CARD_STATUS_LABELS[order.status]}
+                  className="size-8 shrink-0 justify-center bg-card p-0 shadow-none [&_[data-slot=select-trigger-chevron]]:hidden"
+                >
+                  <StatusIcon className={cn('size-4', iconClass)} aria-hidden="true" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="end" className="min-w-40">
+                  {STATUS_SEQUENCE.map((statusOption) => {
+                    const { Icon, iconClass: optionIconClass } = statusConfig[statusOption];
+
+                    return (
+                      <SelectItem key={statusOption} value={statusOption}>
+                        <Icon className={cn('size-4', optionIconClass)} aria-hidden="true" />
+                        {CARD_STATUS_LABELS[statusOption]}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+
+              <Button asChild variant="ghost" size="icon-sm" className="text-link">
+                <a
+                  href={orderUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open order on Amazon"
+                  title="Open order on Amazon"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDelete(order.id)}
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Remove order"
+                title="Remove order"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div
-        className={cn(
-          CARD_CONTENT_WIDTH,
-          'grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 px-6 py-4 md:gap-6',
-        )}
-      >
-        <div className="flex justify-start">
-          <div className="h-24 w-24 overflow-hidden rounded-2xl border border-border bg-muted sm:h-28 sm:w-28 md:h-32 md:w-32">
-            {order.productImage && !hasImageError ? (
-              <img
-                src={order.productImage}
-                alt={order.productName}
-                className="h-full w-full object-cover"
-                onError={() => onImageError(order.id)}
-              />
-            ) : (
-              <div
-                className={cn(
-                  'flex h-full w-full items-center justify-center text-2xl font-semibold text-white',
-                  getFallbackColor(
-                    (order.productName || order.orderNumber || order.id || '').trim() || order.id,
-                  ),
-                )}
-                aria-hidden="true"
-              >
-                {(
-                  (order.productName?.trim() || order.orderNumber?.trim() || 'U')[0] || 'U'
-                ).toUpperCase()}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-col gap-3">
-          <CardTitle className="text-sm font-semibold leading-snug text-foreground hover:text-primary md:text-base">
-            {order.productName.length > 80
-              ? `${order.productName.slice(0, 77)}...`
-              : order.productName}
-          </CardTitle>
-          <div className="flex flex-wrap items-center gap-2 md:gap-3">
-            <div className="flex items-center gap-1.5">
-              {STATUS_SEQUENCE.map((statusOption) => {
-                const { Icon, activeButtonClass, activeIconClass } = statusConfig[statusOption];
-                const isActive = statusOption === order.status;
-                return (
-                  <button
-                    key={statusOption}
-                    type="button"
-                    aria-pressed={isActive}
-                    title={ORDER_STATUS_LABELS[statusOption]}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full border transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                      isActive
-                        ? activeButtonClass
-                        : 'border-border bg-muted text-muted-foreground hover:border-primary/40',
-                    )}
-                    onClick={() => {
-                      if (!isActive) {
-                        onStatusChange(order.id, statusOption);
-                      }
-                    }}
-                  >
-                    <Icon
-                      className={cn(
-                        'h-4 w-4',
-                        isActive ? activeIconClass : 'text-muted-foreground',
-                      )}
-                      aria-hidden="true"
-                    />
-                  </button>
-                );
-              })}
-            </div>
-            <span className="text-[11px] text-muted-foreground/80">Placed {order.orderDate}</span>
-          </div>
-        </div>
-      </div>
       {returnWarning && (
-        <div className="mx-6 mb-4 flex items-start gap-2 border-t border-border pt-3 text-xs">
+        <div className="mt-2.5 flex items-start gap-2 border-t border-border pt-2 text-caption">
           <TriangleAlert
             aria-hidden="true"
             className={cn(
-              'mt-0.5 h-4 w-4 shrink-0',
-              returnWarning.stage === 'warning'
-                ? 'text-amber-700 dark:text-amber-400'
-                : 'text-destructive',
+              'mt-0.5 size-3.5 shrink-0',
+              returnWarning.stage === 'warning' ? 'text-warning' : 'text-destructive',
             )}
           />
           <div className="min-w-0">
@@ -264,72 +284,81 @@ function OrderCardImpl({
             >
               {getReturnWarningLabel(returnWarning)}
             </p>
-            <p className="mt-1 text-muted-foreground">
+            <p className="mt-0.5 text-micro text-muted-foreground">
               Not reimbursed · estimated from order date.
             </p>
-            <a
-              href={`https://www.amazon.com/spr/returns/cart?orderId=${encodeURIComponent(order.orderNumber.replace(/\s+/g, ''))}`}
-              target="_blank"
-              rel="noreferrer"
-              title="Open this order in Amazon's Returns Center"
-              className="mt-2 inline-flex min-h-8 items-center gap-2 rounded-full border border-border px-4 py-2 font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="relative z-20 mt-1.5 h-8 text-caption"
             >
-              Start return <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-            <p className="mt-1 text-muted-foreground">
+              <a
+                href={getAmazonReturnUrl(order.orderNumber)}
+                target="_blank"
+                rel="noreferrer"
+                title="Open this order in Amazon's Returns Center"
+              >
+                Start return <ExternalLink aria-hidden="true" />
+              </a>
+            </Button>
+            <p className="mt-1 text-micro text-muted-foreground">
               Choose items, reason, and return method on Amazon.
             </p>
           </div>
         </div>
       )}
-      <div className={cn(CARD_CONTENT_WIDTH, 'px-6 pb-4')}>
-        <div className="flex min-w-0 items-center gap-2">
-          <input
+
+      <div className="mt-2.5 flex min-w-0 items-center gap-1.5 border-t border-border pt-2">
+        <div className="relative z-20 min-w-0 flex-1">
+          <Label htmlFor={`order-note-${order.id}`} className="sr-only">
+            Order note
+          </Label>
+          <StickyNote
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
             id={`order-note-${order.id}`}
             type="text"
             value={draftNote}
             onChange={(event) => setDraftNote(event.target.value)}
             onKeyDown={handleNoteKeyDown}
-            placeholder="Add a note..."
+            placeholder="Add a note…"
             autoComplete="off"
             title="Press Enter to save · Esc to discard"
-            aria-describedby={isDirty ? `order-note-${order.id}-hint` : undefined}
             className={cn(
-              'min-w-0 flex-1 rounded-full border bg-muted/35 px-4 py-2.5 text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] outline-none transition placeholder:text-muted-foreground/70 focus:ring-4 focus:ring-primary/10',
-              isDirty
-                ? 'border-primary/60 focus:border-primary'
-                : 'border-border/70 focus:border-primary/40',
+              'h-8 bg-card pl-8 pr-2.5 text-caption shadow-none placeholder:text-faint',
+              isDirty && 'border-link focus-visible:border-link',
             )}
           />
-          {isDirty ? (
-            <span
-              id={`order-note-${order.id}-hint`}
-              className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline"
-            >
-              Enter to save · Esc to cancel
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              const sanitized = order.orderNumber.replace(/\s+/g, '');
-              const url = `https://www.amazon.com/gp/css/order-details?orderID=${encodeURIComponent(sanitized)}`;
-              window.open(url, '_blank', 'noopener');
-            }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/15"
-            aria-label="Track order"
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(order.id)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-destructive/30 text-destructive transition hover:bg-destructive/10"
-            aria-label="Remove order"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </button>
         </div>
+
+        {isDirty ? (
+          <>
+            <Button
+              type="button"
+              size="icon-sm"
+              className="relative z-20 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-90"
+              onClick={commitNote}
+              aria-label="Save note"
+              title="Save note"
+            >
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setDraftNote(savedNote)}
+              className="relative z-20 text-muted-foreground motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-90"
+              aria-label="Discard note changes"
+              title="Discard note changes"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          </>
+        ) : null}
       </div>
     </Card>
   );

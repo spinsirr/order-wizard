@@ -2377,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "order-wizard-cli"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "axum",
  "clap",
@@ -3286,7 +3286,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "async-trait",
  "axum",

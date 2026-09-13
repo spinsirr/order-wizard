@@ -1,89 +1,174 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind theme block */
 @theme {
-  --color-background: hsl(210 25% 97%);
-  --color-foreground: hsl(217 52% 10%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(217 52% 10%);
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(217 52% 10%);
-  --color-primary: hsl(256 46% 45%);
-  --color-primary-foreground: hsl(218 100% 97%);
-  --color-secondary: hsl(210 40% 94%);
-  --color-secondary-foreground: hsl(217 52% 16%);
-  --color-muted: hsl(214 32% 92%);
-  --color-muted-foreground: hsl(215 18% 40%);
-  --color-accent: hsl(183 44% 48%);
-  --color-accent-foreground: hsl(182 86% 97%);
-  --color-destructive: hsl(1 70% 55%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-  --color-border: hsl(214 32% 90%);
-  --color-input: hsl(214 32% 90%);
-  --color-ring: hsl(256 46% 45%);
+  --font-sans: "Geist Variable", Arial, sans-serif;
+  --font-display: "Geist Variable", Arial, sans-serif;
+  --font-mono: "Geist Mono Variable", "SFMono-Regular", Consolas, monospace;
 
-  --radius-lg: 0.875rem;
-  --radius-md: calc(0.875rem - 3px);
-  --radius-sm: calc(0.875rem - 6px);
+  --text-micro: 0.625rem;
+  --text-micro--line-height: 0.875rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem;
+  --text-title: 1rem;
+  --text-title--line-height: 1.25rem;
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.75rem;
+
+  --color-background: #fafafa;
+  --color-foreground: #171717;
+  --color-card: #ffffff;
+  --color-card-foreground: #171717;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #171717;
+  --color-primary: #171717;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f5f5f5;
+  --color-secondary-foreground: #171717;
+  --color-muted: #f5f5f5;
+  --color-muted-foreground: #666666;
+  --color-accent: #e9e9e9;
+  --color-accent-foreground: #171717;
+  --color-destructive: #ee0000;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #ebebeb;
+  --color-input: #ebebeb;
+  --color-ring: #0070f3;
+  --color-link: #0070f3;
+  --color-faint: #a1a1a1;
+  --color-warning: #ab570a;
+
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;
+  --radius-sm: 0.25rem;
 }
 
-.dark {
-  /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind theme block */
-  @theme {
-    --color-background: hsl(240 12% 11%);
-    --color-foreground: hsl(216 20% 92%);
-    --color-card: hsl(240 14% 15%);
-    --color-card-foreground: hsl(216 20% 92%);
-    --color-popover: hsl(240 14% 15%);
-    --color-popover-foreground: hsl(216 20% 92%);
-    --color-primary: hsl(256 66% 75%);
-    --color-primary-foreground: hsl(254 63% 18%);
-    --color-secondary: hsl(230 16% 20%);
-    --color-secondary-foreground: hsl(216 20% 92%);
-    --color-muted: hsl(230 16% 20%);
-    --color-muted-foreground: hsl(216 15% 70%);
-    --color-accent: hsl(183 47% 60%);
-    --color-accent-foreground: hsl(194 86% 12%);
-    --color-destructive: hsl(0 80% 70%);
-    --color-destructive-foreground: hsl(354 61% 18%);
-    --color-border: hsl(230 18% 27%);
-    --color-input: hsl(230 18% 27%);
-    --color-ring: hsl(256 66% 75%);
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #000000;
+    --color-foreground: #ededed;
+    --color-card: #0a0a0a;
+    --color-card-foreground: #ededed;
+    --color-popover: #0a0a0a;
+    --color-popover-foreground: #ededed;
+    --color-primary: #ededed;
+    --color-primary-foreground: #0a0a0a;
+    --color-secondary: #242424;
+    --color-secondary-foreground: #ededed;
+    --color-muted: #242424;
+    --color-muted-foreground: #a1a1a1;
+    --color-accent: #363636;
+    --color-accent-foreground: #ededed;
+    --color-destructive: #ff8589;
+    --color-destructive-foreground: #0a0a0a;
+    --color-border: #2e2e2e;
+    --color-input: #2e2e2e;
+    --color-ring: #52a8ff;
+    --color-link: #52a8ff;
+    --color-faint: #737373;
+    --color-warning: #f5a623;
   }
 }
 
 * {
   border-color: var(--color-border);
+  box-sizing: border-box;
 }
 
-body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  width: 100%;
-  min-height: 100vh;
 }
 
-#root {
-  width: 100%;
-  height: 100%;
-  min-width: 400px;
+html {
+  color-scheme: light dark;
 }
 
-/* Scrollbar styling */
+body {
+  min-width: 320px;
+  overflow: hidden;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button,
+select {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-link) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sidepanel-header-enter {
+    animation: sidepanel-header-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .sidepanel-controls-enter {
+    animation: sidepanel-content-enter 300ms 55ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .sidepanel-order-enter {
+    animation: sidepanel-content-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .sidepanel-order-position {
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes sidepanel-header-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+}
+
+@keyframes sidepanel-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem);
+  }
+}
+
 * {
+  scrollbar-color: color-mix(in srgb, var(--color-faint) 55%, transparent) transparent;
   scrollbar-width: thin;
-  scrollbar-color: var(--color-primary) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 7px;
+  height: 7px;
 }
 
 *::-webkit-scrollbar-track {
@@ -91,15 +176,13 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--color-primary) 85%, transparent),
-    color-mix(in srgb, var(--color-primary-foreground) 15%, transparent)
-  );
+  border: 2px solid transparent;
   border-radius: 9999px;
-  border: 2px solid color-mix(in srgb, var(--color-background) 85%, transparent);
+  background: color-mix(in srgb, var(--color-faint) 55%, transparent);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary);
+  background: color-mix(in srgb, var(--color-muted-foreground) 76%, transparent);
+  background-clip: padding-box;
 }

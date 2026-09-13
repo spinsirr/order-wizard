@@ -10,6 +10,7 @@ import type { ExtensionMessage } from '@/types/messages';
 
 interface SyncContextValue {
   isSyncing: boolean;
+  error: Error | null;
   lastSyncedAt: Date | null;
   pendingCount: number;
   triggerSync: () => void;
@@ -129,7 +130,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SyncContext.Provider value={{ isSyncing: syncMutation.isPending, lastSyncedAt, pendingCount, triggerSync }}>
+    <SyncContext.Provider
+      value={{
+        isSyncing: syncMutation.isPending,
+        error: syncMutation.error,
+        lastSyncedAt,
+        pendingCount,
+        triggerSync,
+      }}
+    >
       {children}
     </SyncContext.Provider>
   );
@@ -138,7 +147,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 export function useSync(): SyncContextValue {
   const context = useContext(SyncContext);
   if (!context) {
-    return { isSyncing: false, lastSyncedAt: null, pendingCount: 0, triggerSync: () => {} };
+    return {
+      isSyncing: false,
+      error: null,
+      lastSyncedAt: null,
+      pendingCount: 0,
+      triggerSync: () => {},
+    };
   }
   return context;
 }

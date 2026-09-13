@@ -6,22 +6,23 @@ import { useEffect } from 'react';
 import { initializeErrorHandlers } from '@/lib';
 
 function AppContent() {
-  const { isSyncing, lastSyncedAt, pendingCount, triggerSync } = useSync();
+  const { isSyncing, error: syncError, lastSyncedAt, pendingCount, triggerSync } = useSync();
 
   useEffect(() => {
     initializeErrorHandlers();
   }, []);
 
   return (
-    <div className="flex h-full w-full flex-col bg-background">
+    <main className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <UserBar
         isSyncing={isSyncing}
+        syncError={syncError}
         lastSyncedAt={lastSyncedAt}
         pendingCount={pendingCount}
         onSync={triggerSync}
       />
       <OrderTable />
-    </div>
+    </main>
   );
 }
 
