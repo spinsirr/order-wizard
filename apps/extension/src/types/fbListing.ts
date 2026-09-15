@@ -1,3 +1,9 @@
+import type { z } from 'zod';
+import type {
+  FBListingDataSchema,
+  FBListingTemplateSchema,
+  ProductDetailsSchema,
+} from '@/schemas/fbListing';
 export const FBCondition = {
   New: 'new',
   UsedLikeNew: 'used_like_new',
@@ -48,38 +54,11 @@ export const FB_CATEGORY_LABELS: Record<FBCategory, string> = {
   [FBCategory.Sports]: 'Sports & Outdoors',
 };
 
-export interface FBListingTemplate {
-  discountPercent: number;
-  priceRounding: PriceRounding;
-  condition: FBCondition;
-  category: FBCategory;
-  pickupLocation: string;
-  includeOrderLink: boolean;
-  descriptionTemplate: string;
-}
+export type FBListingTemplate = z.infer<typeof FBListingTemplateSchema>;
 
-export interface FBListingData {
-  title: string;
-  description: string;
-  price: string;
-  originalPrice: string;
-  condition: FBCondition;
-  category: FBCategory;
-  pickupLocation: string;
-  images: string[];
-  orderNumber: string;
-  orderDate: string;
-  productUrl?: string;
-}
+export type FBListingData = z.infer<typeof FBListingDataSchema>;
 
-export interface ProductDetails {
-  description: string;
-  features: string[];
-  images: string[];
-  category?: string;
-  /** Current selling price on Amazon (may differ from original order price) */
-  currentPrice?: string;
-}
+export type ProductDetails = z.infer<typeof ProductDetailsSchema>;
 
 export const DEFAULT_TEMPLATE: FBListingTemplate = {
   discountPercent: 70,

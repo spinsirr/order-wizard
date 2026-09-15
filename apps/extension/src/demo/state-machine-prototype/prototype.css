@@ -1,0 +1,54 @@
+.machine-prototype .react-flow {
+  --xy-background-color: var(--color-background);
+  --xy-edge-stroke: var(--color-faint);
+  --xy-edge-stroke-selected: var(--color-link);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-label-color: var(--color-foreground);
+  --xy-edge-label-background-color: var(--color-background);
+  --xy-handle-background-color: var(--color-foreground);
+  --xy-handle-border-color: var(--color-card);
+  --xy-controls-button-background-color: var(--color-card);
+  --xy-controls-button-background-color-hover: var(--color-secondary);
+  --xy-controls-button-color: var(--color-foreground);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-attribution-background-color: var(--color-background);
+}
+
+.machine-prototype .react-flow__edge-text {
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+}
+
+.machine-prototype .react-flow__handle {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+}
+
+.machine-prototype .react-flow__handle::after {
+  position: absolute;
+  inset: 9px;
+  border: 2px solid var(--color-card);
+  border-radius: 50%;
+  background: var(--color-foreground);
+  content: "";
+  pointer-events: none;
+}
+
+.machine-prototype .react-flow__handle:hover::after,
+.machine-prototype .react-flow__handle.connectingto::after {
+  background: var(--color-link);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-ring) 20%, transparent);
+}
+
+.machine-prototype .react-flow__edge.selected .react-flow__edgeupdater {
+  fill: var(--color-background);
+  stroke: var(--color-link);
+  stroke-width: 1.5;
+}
+
+.machine-prototype .react-flow__controls-button {
+  width: 32px;
+  height: 32px;
+}

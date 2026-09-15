@@ -6,6 +6,7 @@ import {
   RETURN_REMINDER_NOTIFICATION,
   RETURN_REMINDER_STATE_KEY,
 } from '@/background/returnReminders';
+import { orderKey } from '@/lib/orderStorage';
 import { type Order, OrderStatus } from '@/types';
 
 function order(id = 'order-1', overrides: Partial<Order> = {}): Order {
@@ -35,7 +36,10 @@ const api = {
   },
   action: { setBadgeText: vi.fn(), setBadgeBackgroundColor: vi.fn(), setTitle: vi.fn() },
   notifications: {
-    create: vi.fn(),
+    create:
+      vi.fn<
+        (id: string, options: chrome.notifications.NotificationCreateOptions) => Promise<string>
+      >(),
     clear: vi.fn(),
     getPermissionLevel: vi.fn(),
     onClicked: { addListener: vi.fn() },
@@ -52,7 +56,7 @@ const api = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  storage = { orders: [order()] };
+  storage = { orders: [order()], last_order_user: 'user' };
   api.notifications.getPermissionLevel.mockResolvedValue('granted');
   api.notifications.create.mockResolvedValue(RETURN_REMINDER_NOTIFICATION);
   api.alarms.get.mockResolvedValue(undefined);
@@ -67,79 +71,69 @@ afterEach(() => {
 describe('background return reminders', () => {
   it('notifies once per stage across repeated checks and ignores note edits', async () => {
     for (const age of [25, 25, 26, 27, 28, 28, 29, 30, 31, 40]) {
-      storage.orders = [order('order-1', { note: `Edited at age ${age}` })];
+      storage['orders'] = [order('order-1', { note: `Edited at age ${age}` })];
       await checkReturnReminders(new Date(2026, 7, 1 + age));
     }
     expect(api.notifications.create).toHaveBeenCalledTimes(3);
-    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({ 'order-1': '2026-08-31:overdue' });
+    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({
+      [orderKey(order())]: '2026-08-31:overdue',
+    });
   });
 
-  it('groups orders in one notification and shows only counts', async () => {
-    storage.orders = [
+  it('keeps delivery history when cloud sync replaces the local record id', async () => {
+    storage['orders'] = [order('local-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 26));
+    storage['orders'] = [order('cloud-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 26));
+    expect(api.notifications.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('groups orders in one notification without leaking order details', async () => {
+    storage['orders'] = [
       order('private-id-1'),
       order('private-id-2'),
       order('paid', { status: OrderStatus.Reimbursed }),
     ];
     await checkReturnReminders(new Date(2026, 8, 1));
-    expect(api.action.setBadgeText).toHaveBeenLastCalledWith({ text: '2' });
     expect(api.notifications.create).toHaveBeenCalledTimes(1);
-    const notification = api.notifications.create.mock.calls[0][1];
-    expect(notification.message).toContain('2 orders');
-    expect(notification.message).toContain('2 at 30+ days');
+    const notification = api.notifications.create.mock.calls[0]?.[1];
     expect(JSON.stringify(notification)).not.toMatch(/Private product|private-id|\$20/);
   });
 
-  it('keeps reminder history when cloud sync replaces the local record id', async () => {
-    storage.orders = [order('local-id', { orderNumber: 'amazon-order' })];
-    await checkReturnReminders(new Date(2026, 7, 26));
-    storage.orders = [order('cloud-id', { orderNumber: 'amazon-order' })];
-    await checkReturnReminders(new Date(2026, 7, 27));
-    expect(api.notifications.create).toHaveBeenCalledTimes(1);
-    expect(api.notifications.clear).not.toHaveBeenCalled();
-    expect(api.action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
-
-    await checkReturnReminders(new Date(2026, 7, 29));
-    expect(api.notifications.create).toHaveBeenCalledTimes(2);
-  });
-
-  it.each([
-    'reimbursed',
-    'deleted',
-    'removed',
-  ])('clears badge, notification and state after an order is %s', async (resolution) => {
-    await checkReturnReminders(new Date(2026, 7, 26));
-    storage.orders =
-      resolution === 'removed'
-        ? []
-        : [
-            order(
-              'order-1',
-              resolution === 'reimbursed'
-                ? { status: OrderStatus.Reimbursed }
-                : { deletedAt: '2026-08-27' },
-            ),
-          ];
-    await checkReturnReminders(new Date(2026, 7, 27));
-    expect(api.action.setBadgeText).toHaveBeenLastCalledWith({ text: '' });
-    expect(api.notifications.clear).toHaveBeenCalledWith(RETURN_REMINDER_NOTIFICATION);
-    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({});
-    expect(api.notifications.create).toHaveBeenCalledTimes(1);
-  });
+  it.each(['reimbursed', 'deleted', 'removed'])(
+    'clears notification and delivery state after an order is %s',
+    async (resolution) => {
+      await checkReturnReminders(new Date(2026, 7, 26));
+      storage['orders'] =
+        resolution === 'removed'
+          ? []
+          : [
+              order(
+                'order-1',
+                resolution === 'reimbursed'
+                  ? { status: OrderStatus.Reimbursed }
+                  : { deletedAt: '2026-08-27T00:00:00Z' },
+              ),
+            ];
+      await checkReturnReminders(new Date(2026, 7, 27));
+      expect(api.notifications.clear).toHaveBeenCalledWith(RETURN_REMINDER_NOTIFICATION);
+      expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({});
+      expect(api.notifications.create).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('clears a stale grouped notification when one order is resolved', async () => {
-    storage.orders = [order('one'), order('two')];
+    storage['orders'] = [order('one'), order('two')];
     await checkReturnReminders(new Date(2026, 7, 26));
-    storage.orders = [order('one'), order('two', { status: OrderStatus.Reimbursed })];
+    storage['orders'] = [order('one'), order('two', { status: OrderStatus.Reimbursed })];
     await checkReturnReminders(new Date(2026, 7, 26));
-    expect(api.action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
     expect(api.notifications.clear).toHaveBeenCalledWith(RETURN_REMINDER_NOTIFICATION);
     expect(api.notifications.create).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a badge when desktop alerts are disabled and delivers once permission returns', async () => {
+  it('preserves pending delivery when alerts are disabled and delivers once permission returns', async () => {
     api.notifications.getPermissionLevel.mockResolvedValue('denied');
     await checkReturnReminders(new Date(2026, 7, 29));
-    expect(api.action.setBadgeText).toHaveBeenCalledWith({ text: '1' });
     expect(api.notifications.create).not.toHaveBeenCalled();
     expect(storage[RETURN_REMINDER_STATE_KEY]).toBeUndefined();
     api.notifications.getPermissionLevel.mockResolvedValue('granted');
@@ -152,17 +146,19 @@ describe('background return reminders', () => {
     await expect(checkReturnReminders(new Date(2026, 7, 26))).rejects.toThrow('Delivery failed');
     expect(storage[RETURN_REMINDER_STATE_KEY]).toBeUndefined();
     await checkReturnReminders(new Date(2026, 7, 26));
-    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({ 'order-1': '2026-08-31:warning' });
+    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({
+      [orderKey(order())]: '2026-08-31:warning',
+    });
   });
 
   it('rearms when reimbursement is reversed or the order date is corrected', async () => {
     const now = new Date(2026, 7, 29);
     await checkReturnReminders(now);
-    storage.orders = [order('order-1', { status: OrderStatus.Reimbursed })];
+    storage['orders'] = [order('order-1', { status: OrderStatus.Reimbursed })];
     await checkReturnReminders(now);
-    storage.orders = [order()];
+    storage['orders'] = [order()];
     await checkReturnReminders(now);
-    storage.orders = [order('order-1', { orderDate: '2026-08-04' })];
+    storage['orders'] = [order('order-1', { orderDate: '2026-08-04' })];
     await checkReturnReminders(now);
     expect(api.notifications.create).toHaveBeenCalledTimes(3);
   });
@@ -171,8 +167,8 @@ describe('background return reminders', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 7, 29));
     initializeReturnReminders();
-    const onStartup = api.runtime.onStartup.addListener.mock.calls[0][0];
-    const onChanged = api.storage.onChanged.addListener.mock.calls[0][0];
+    const onStartup = api.runtime.onStartup.addListener.mock.calls[0]?.[0];
+    const onChanged = api.storage.onChanged.addListener.mock.calls[0]?.[0];
     onChanged({ orders: {} }, 'local');
     await onStartup();
     await vi.waitFor(() => expect(storage[RETURN_REMINDER_STATE_KEY]).toBeDefined());
@@ -184,12 +180,14 @@ describe('background return reminders', () => {
   });
 
   it('keeps an existing alarm and opens the return queue when its notification is clicked', async () => {
-    storage.orders = [];
+    storage['orders'] = [];
     api.alarms.get.mockResolvedValue({ name: RETURN_REMINDER_ALARM });
     initializeReturnReminders();
-    await vi.waitFor(() => expect(api.action.setBadgeText).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(api.notifications.clear).toHaveBeenCalledWith(RETURN_REMINDER_NOTIFICATION),
+    );
     expect(api.alarms.create).not.toHaveBeenCalled();
-    const onClicked = api.notifications.onClicked.addListener.mock.calls[0][0];
+    const onClicked = api.notifications.onClicked.addListener.mock.calls[0]?.[0];
     onClicked('unrelated');
     expect(api.tabs.create).not.toHaveBeenCalled();
     onClicked(RETURN_REMINDER_NOTIFICATION);

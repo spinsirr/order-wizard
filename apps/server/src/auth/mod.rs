@@ -62,7 +62,7 @@ pub struct JwksVerifier {
 
 impl JwksVerifier {
     pub fn new(issuer: String, policy: AuthPolicy) -> Self {
-        let jwks_url = format!("{}/.well-known/jwks.json", issuer);
+        let jwks_url = format!("{issuer}/.well-known/jwks.json");
         Self {
             cache: Arc::new(RwLock::new(None)),
             jwks_url,
@@ -75,18 +75,18 @@ impl JwksVerifier {
     async fn fetch_jwks(&self) -> Result<HashMap<String, DecodingKey>, String> {
         let response = reqwest::get(&self.jwks_url)
             .await
-            .map_err(|e| format!("Failed to fetch JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to fetch JWKS: {e}"))?;
 
         let jwks: Jwks = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to parse JWKS: {e}"))?;
 
         let mut keys = HashMap::new();
         for jwk in jwks.keys {
             if jwk.kty == "RSA" && jwk.alg == "RS256" {
                 let key = DecodingKey::from_rsa_components(&jwk.n, &jwk.e)
-                    .map_err(|e| format!("Failed to create decoding key: {}", e))?;
+                    .map_err(|e| format!("Failed to create decoding key: {e}"))?;
                 keys.insert(jwk.kid, key);
             }
         }
@@ -343,24 +343,17 @@ pub async fn auth_middleware(
     next: Next,
 ) -> Response {
     // Extract token from Authorization header
-    let auth_header = match request
+    let Some(auth_header) = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
-    {
-        Some(h) => h,
-        None => {
-            return AuthError::invalid_request("Missing Authorization header")
-                .into_response_with_policy(&verifier.policy);
-        }
+    else {
+        return AuthError::invalid_request("Missing Authorization header")
+            .into_response_with_policy(&verifier.policy);
     };
-
-    let token = match auth_header.strip_prefix("Bearer ") {
-        Some(t) => t,
-        None => {
-            return AuthError::invalid_request("Authorization header must use Bearer scheme")
-                .into_response_with_policy(&verifier.policy);
-        }
+    let Some(token) = auth_header.strip_prefix("Bearer ") else {
+        return AuthError::invalid_request("Authorization header must use Bearer scheme")
+            .into_response_with_policy(&verifier.policy);
     };
 
     // Verify the token

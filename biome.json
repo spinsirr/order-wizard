@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -7,14 +7,70 @@
     "lineWidth": 100
   },
   "linter": {
-    "enabled": true
+    "enabled": true,
+    "rules": {
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["error", "warn", "info"]
+          }
+        },
+        "noConfusingVoidType": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useConst": "error",
+        "useBlockStatements": "error",
+        "useConsistentArrayType": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "error"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 20
+          }
+        },
+        "useOptionalChain": "error",
+        "useLiteralKeys": "off"
+      },
+      "a11y": {
+        "preset": "recommended"
+      },
+      "security": {
+        "preset": "recommended"
+      },
+      "preset": "recommended",
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      }
+    }
   },
   "files": {
-    "includes": ["apps/extension/src/**/*.ts", "apps/extension/src/**/*.tsx"]
+    "includes": [
+      "**",
+      "!!**/node_modules",
+      "!!**/.wxt",
+      "!!**/.output",
+      "!!**/storybook-static",
+      "!!**/target",
+      "!!.pnpm-store",
+      "!!docs/architecture/*.svg"
+    ],
+    "ignoreUnknown": true
   },
   "css": {
     "parser": {
-      "cssModules": true
+      "cssModules": true,
+      "tailwindDirectives": true
     }
   },
   "javascript": {
@@ -22,5 +78,35 @@
       "quoteStyle": "single",
       "jsxQuoteStyle": "double"
     }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/extension/src/**", "!apps/extension/src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "radix-ui": "Import shared controls from @/components/ui."
+                },
+                "patterns": [
+                  {
+                    "group": ["@radix-ui/*"],
+                    "message": "Import shared controls from @/components/ui."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   }
 }

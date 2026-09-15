@@ -1,5 +1,16 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import {
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import {
   useDeleteOrders,
   useOrders,
@@ -7,27 +18,28 @@ import {
   useUpdateOrderStatus,
 } from '@/hooks/useOrders';
 import { useReturnWarnings } from '@/hooks/useReturnWarnings';
-import { ReturnWarningSummary } from './ReturnWarningSummary';
 import type { OrderStatus } from '@/types';
-import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
-import { filterAndSortOrders } from '@/utils/orderFilters';
 import type { ExportFormat } from '@/utils/orderExport';
 import { exportOrders } from '@/utils/orderExport';
+import type { OrderSortOption, StatusFilter } from '@/utils/orderFilters';
+import { filterAndSortOrders } from '@/utils/orderFilters';
 import { type ConfirmData, DeleteConfirmModal } from './DeleteConfirmModal';
 import { OrderCard } from './OrderCard';
 import { OrderTableEmpty, OrderTableLoading, OrderTableNoResults } from './OrderEmptyStates';
+import { DEFAULT_STATUS_OPTIONS, OrderStatusSelect } from './OrderStatusSelect';
 import { OrderTableFilters } from './OrderTableFilters';
 import { OrderTableToolbar } from './OrderTableToolbar';
+import { ReturnWarningSummary } from './ReturnWarningSummary';
 
-export function OrderTable() {
+export function OrderTable({ emptyState }: { emptyState?: ReactNode }) {
   // TanStack Query hooks
-  const { data: orders = [], isLoading } = useOrders();
+  const { data: orders = [], isLoading, error: queryError, refetch } = useOrders();
   const updateStatusMutation = useUpdateOrderStatus();
   const updateNoteMutation = useUpdateOrderNote();
   const deleteOrdersMutation = useDeleteOrders();
   const { mutate: mutateStatus } = updateStatusMutation;
   const { mutate: mutateNote } = updateNoteMutation;
-  const { mutateAsync: mutateDelete, isPending: isDeleting } = deleteOrdersMutation;
+  const { mutate: mutateDelete, isPending: isDeleting, reset: resetDelete } = deleteOrdersMutation;
 
   // UI state (local - no need for global store)
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,7 +52,6 @@ export function OrderTable() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [imageFailures, setImageFailures] = useState<Set<string>>(new Set());
-
   const [showingWarnings, setShowingWarnings] = useState(
     () => new URLSearchParams(window.location.search).get('view') === 'returns',
   );
@@ -72,9 +83,12 @@ export function OrderTable() {
     });
   }, [orders]);
 
-  const selectedCount = displayOrders.filter((order) => selectedIds.has(order.id)).length;
-  const allSelected = displayOrders.length > 0 && selectedCount === displayOrders.length;
-  const someSelected = selectedCount > 0 && selectedCount < displayOrders.length;
+  const displayedSelectedCount = useMemo(
+    () => displayOrders.reduce((count, order) => count + Number(selectedIds.has(order.id)), 0),
+    [displayOrders, selectedIds],
+  );
+  const allSelected = displayOrders.length > 0 && displayedSelectedCount === displayOrders.length;
+  const someSelected = displayedSelectedCount > 0 && !allSelected;
 
   const toggleSelectAll = useCallback(
     (checked: boolean) => {
@@ -97,7 +111,9 @@ export function OrderTable() {
 
   const handleDeleteSelected = useCallback(() => {
     const ids = displayOrders.filter((order) => selectedIds.has(order.id)).map((order) => order.id);
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      return;
+    }
     setConfirmData({
       type: 'bulk',
       orderIds: ids,
@@ -109,37 +125,45 @@ export function OrderTable() {
     setConfirmData({ type: 'single', orderId, message: 'Delete this order?' });
   }, []);
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!confirmData) return;
+  const handleConfirmDelete = useCallback(() => {
+    if (!confirmData) {
+      return;
+    }
 
     const idsToDelete = confirmData.type === 'bulk' ? confirmData.orderIds : [confirmData.orderId];
 
-    await mutateDelete(idsToDelete);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const id of idsToDelete) {
-        next.delete(id);
-      }
-      return next;
+    mutateDelete(idsToDelete, {
+      onSuccess: () => {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of idsToDelete) {
+            next.delete(id);
+          }
+          return next;
+        });
+        setConfirmData(null);
+      },
     });
-    setConfirmData(null);
   }, [confirmData, mutateDelete]);
 
   const handleCancelDelete = useCallback(() => {
-    if (isDeleting) return;
+    if (isDeleting) {
+      return;
+    }
     setConfirmData(null);
-  }, [isDeleting]);
+    resetDelete();
+  }, [isDeleting, resetDelete]);
 
-  const handleExport = useCallback(
-    (format: ExportFormat) => {
-      exportOrders(displayOrders, format);
-    },
-    [displayOrders],
-  );
+  const exportMutation = useMutation({
+    mutationFn: (format: ExportFormat) => exportOrders(displayOrders, format),
+  });
+  const handleExport = exportMutation.mutate;
 
   const handleImageError = useCallback((orderId: string) => {
     setImageFailures((previous) => {
-      if (previous.has(orderId)) return previous;
+      if (previous.has(orderId)) {
+        return previous;
+      }
       const next = new Set(previous);
       next.add(orderId);
       return next;
@@ -166,9 +190,9 @@ export function OrderTable() {
   const virtualizer = useVirtualizer({
     count: displayOrders.length,
     getScrollElement: () => scrollParentRef.current,
-    estimateSize: () => 220,
+    estimateSize: () => 184,
     overscan: 6,
-    gap: 14,
+    gap: 10,
     getItemKey: (index) => displayOrders[index]?.id ?? index,
   });
 
@@ -176,13 +200,29 @@ export function OrderTable() {
     return <OrderTableLoading />;
   }
 
-  if (orders.length === 0) {
-    return <OrderTableEmpty />;
+  if (queryError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {queryError.message}
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
   }
+
+  if (orders.length === 0) {
+    return emptyState ?? <OrderTableEmpty />;
+  }
+
+  const mutationError =
+    updateStatusMutation.error ?? updateNoteMutation.error ?? exportMutation.error;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-shrink-0 space-y-5 p-3 sm:p-4">
+      <div className="sidepanel-controls-enter flex-shrink-0 space-y-2.5 border-b border-border bg-background/95 px-3 pb-2.5 pt-2.5 backdrop-blur-lg">
         <ReturnWarningSummary
           warnings={returnWarnings}
           showingWarnings={showingWarnings}
@@ -190,35 +230,39 @@ export function OrderTable() {
             setShowingWarnings(!showingWarnings);
             setSearchQuery('');
             setStatusFilter('all');
-            if (!showingWarnings) setSortOption('date-asc');
+            if (!showingWarnings) {
+              setSortOption('date-asc');
+            }
           }}
         />
-        <OrderTableToolbar
-          displayCount={displayOrders.length}
-          selectedCount={selectedCount}
-          allSelected={allSelected}
-          someSelected={someSelected}
-          onToggleSelectAll={toggleSelectAll}
-          onDeleteSelected={handleDeleteSelected}
-          onExport={handleExport}
-        />
-
         <OrderTableFilters
           searchQuery={searchQuery}
           statusFilter={statusFilter}
-          sortOption={sortOption}
           onSearchChange={setSearchQuery}
           onStatusFilterChange={setStatusFilter}
+        />
+
+        {mutationError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{mutationError.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        <OrderTableToolbar
+          displayCount={displayOrders.length}
+          selectedCount={displayedSelectedCount}
+          allSelected={allSelected}
+          someSelected={someSelected}
+          sortOption={sortOption}
+          onToggleSelectAll={toggleSelectAll}
+          onDeleteSelected={handleDeleteSelected}
+          onExport={handleExport}
           onSortOptionChange={setSortOption}
         />
       </div>
 
-      <div
-        ref={scrollParentRef}
-        className="flex-1 overflow-y-auto px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4"
-      >
+      <div ref={scrollParentRef} className="flex-1 overflow-y-auto px-3 pb-3 pt-2.5">
         {showingWarnings && returnWarnings.size === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="py-6 text-center text-body text-muted-foreground">
             No orders currently need a return reminder.
           </p>
         ) : displayOrders.length === 0 ? (
@@ -236,12 +280,15 @@ export function OrderTable() {
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const order = displayOrders[virtualRow.index];
-              if (!order) return null;
+              if (!order) {
+                return null;
+              }
               return (
                 <div
                   key={virtualRow.key}
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
+                  className="sidepanel-order-position"
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -250,17 +297,29 @@ export function OrderTable() {
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <OrderCard
-                    order={order}
-                    returnWarning={returnWarnings.get(order.id)}
-                    isSelected={selectedIds.has(order.id)}
-                    hasImageError={imageFailures.has(order.id)}
-                    onToggleSelect={toggleSelect}
-                    onStatusChange={handleStatusChange}
-                    onNoteSave={handleNoteSave}
-                    onDelete={handleDeleteSingle}
-                    onImageError={handleImageError}
-                  />
+                  <div
+                    className="sidepanel-order-enter"
+                    style={{ animationDelay: `${120 + Math.min(virtualRow.index, 6) * 35}ms` }}
+                  >
+                    <OrderCard
+                      order={order}
+                      returnWarning={returnWarnings.get(order.id)}
+                      isSelected={selectedIds.has(order.id)}
+                      hasImageError={imageFailures.has(order.id)}
+                      onToggleSelect={toggleSelect}
+                      statusControl={
+                        <OrderStatusSelect
+                          value={order.status}
+                          options={DEFAULT_STATUS_OPTIONS}
+                          productName={order.productName}
+                          onChange={(status) => handleStatusChange(order.id, status)}
+                        />
+                      }
+                      onNoteSave={handleNoteSave}
+                      onDelete={handleDeleteSingle}
+                      onImageError={handleImageError}
+                    />
+                  </div>
                 </div>
               );
             })}
@@ -272,7 +331,8 @@ export function OrderTable() {
         <DeleteConfirmModal
           confirmData={confirmData}
           isDeleting={isDeleting}
-          onConfirm={() => void handleConfirmDelete()}
+          error={deleteOrdersMutation.error}
+          onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
         />
       ) : null}

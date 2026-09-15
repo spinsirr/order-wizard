@@ -71,9 +71,9 @@ struct Session {
 }
 
 pub(crate) fn api_url() -> Result<Url, CliError> {
-    let value = std::env::var("ORDER_WIZARD_API_URL").unwrap_or_else(|_| DEFAULT_API.to_string());
+    let value = std::env::var("ORDERCUE_API_URL").unwrap_or_else(|_| DEFAULT_API.to_string());
     let url = Url::parse(&format!("{}/", value.trim_end_matches('/')))
-        .map_err(|_| CliError::config("ORDER_WIZARD_API_URL is invalid"))?;
+        .map_err(|_| CliError::config("ORDERCUE_API_URL is invalid"))?;
     if !url.username().is_empty()
         || url.password().is_some()
         || url.query().is_some()
@@ -135,11 +135,11 @@ fn cache_key(profile: Profile, api: &Url) -> String {
 }
 fn load(profile: Profile, api: &Url) -> Result<Session, CliError> {
     let data = entry(profile, api)
-        .map_err(|_| CliError::auth("No saved login is available: the system credential store is unavailable. Set ORDER_WIZARD_ACCESS_TOKEN or enable the system credential store."))?
+        .map_err(|_| CliError::auth("No saved login is available: the system credential store is unavailable. Set ORDERCUE_ACCESS_TOKEN or enable the system credential store."))?
         .get_secret()
         .map_err(|error| match error {
             keyring::Error::NoEntry => CliError::auth(format!(
-                "Run order-wizard auth login{} (or set ORDER_WIZARD_ACCESS_TOKEN)",
+                "Run ordercue auth login{} (or set ORDERCUE_ACCESS_TOKEN)",
                 if matches!(profile, Profile::Mcp) {
                     " --mcp"
                 } else {
@@ -206,6 +206,87 @@ async fn receive_callback(
     )
 }
 
+async fn discover_metadata(http: &Client, issuer: &str) -> Result<Metadata, CliError> {
+    let issuer_url = secure_endpoint(issuer)?;
+    let metadata: Metadata = http
+        .get(format!(
+            "{}/.well-known/openid-configuration",
+            issuer_url.as_str().trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .map_err(|_| CliError::network("Could not retrieve OAuth metadata"))?
+        .error_for_status()
+        .map_err(|_| CliError::config("OAuth discovery failed"))?
+        .json()
+        .await
+        .map_err(|_| CliError::config("Invalid OAuth metadata"))?;
+    if metadata.issuer != issuer {
+        return Err(CliError::config(
+            "OAuth issuer does not match server configuration",
+        ));
+    }
+    secure_endpoint(&metadata.authorization_endpoint)?;
+    secure_endpoint(&metadata.token_endpoint)?;
+    secure_endpoint(&metadata.revocation_endpoint)?;
+    Ok(metadata)
+}
+
+async fn listen_for_code(
+    listener: tokio::net::TcpListener,
+    state: CsrfToken,
+    url: &Url,
+    no_browser: bool,
+) -> Result<String, CliError> {
+    let (sender, receiver) = oneshot::channel();
+    let app = Router::new()
+        .route("/callback", get(receive_callback))
+        .layer(axum::middleware::map_response(
+            |mut response: axum::response::Response| async move {
+                response
+                    .headers_mut()
+                    .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+                response
+                    .headers_mut()
+                    .insert(header::REFERRER_POLICY, "no-referrer".parse().unwrap());
+                response
+            },
+        ))
+        .with_state(Arc::new(PendingLogin {
+            expected_state: state,
+            authority: listener
+                .local_addr()
+                .map_err(|_| CliError::network("Could not read local login address"))?
+                .to_string(),
+            result: Mutex::new(Some(sender)),
+        }));
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let mut server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
+    eprintln!("Sign in using your browser:\n{url}");
+    if !no_browser && open::that(url.as_str()).is_err() {
+        eprintln!("Open the URL above in your browser to continue.");
+    }
+    let outcome = tokio::time::timeout(Duration::from_secs(300), receiver).await;
+    let _ = shutdown_tx.send(());
+    if tokio::time::timeout(Duration::from_secs(2), &mut server)
+        .await
+        .is_err()
+    {
+        server.abort();
+    }
+    let code = outcome
+        .map_err(|_| CliError::auth("Login timed out; try again"))?
+        .map_err(|_| CliError::auth("Login listener closed"))?
+        .map_err(|()| CliError::auth("Login was denied"))?;
+    Ok(code)
+}
+
 pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, CliError> {
     let api = api_url()?;
     let _ = entry(profile, &api)?;
@@ -235,28 +316,7 @@ pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, C
     .ok_or_else(|| {
         CliError::config("Server must configure one client ID for this login profile")
     })?;
-    let issuer = secure_endpoint(&config.issuer)?;
-    let metadata: Metadata = http
-        .get(format!(
-            "{}/.well-known/openid-configuration",
-            issuer.as_str().trim_end_matches('/')
-        ))
-        .send()
-        .await
-        .map_err(|_| CliError::network("Could not retrieve OAuth metadata"))?
-        .error_for_status()
-        .map_err(|_| CliError::config("OAuth discovery failed"))?
-        .json()
-        .await
-        .map_err(|_| CliError::config("Invalid OAuth metadata"))?;
-    if metadata.issuer != config.issuer {
-        return Err(CliError::config(
-            "OAuth issuer does not match server configuration",
-        ));
-    }
-    secure_endpoint(&metadata.authorization_endpoint)?;
-    secure_endpoint(&metadata.token_endpoint)?;
-    secure_endpoint(&metadata.revocation_endpoint)?;
+    let metadata = discover_metadata(&http, &config.issuer).await?;
     let redirect_uri = api.join("oauth/cli/callback").unwrap().to_string();
     secure_endpoint(&redirect_uri)?;
     let oauth = BasicClient::new(ClientId::new(client_id.clone()))
@@ -280,49 +340,7 @@ pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, C
         request = request.add_scope(Scope::new(format!("{}/{name}", config.resource)));
     }
     let (url, _) = request.url();
-    let (sender, receiver) = oneshot::channel();
-    let app = Router::new()
-        .route("/callback", get(receive_callback))
-        .layer(axum::middleware::map_response(
-            |mut response: axum::response::Response| async move {
-                response
-                    .headers_mut()
-                    .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
-                response
-                    .headers_mut()
-                    .insert(header::REFERRER_POLICY, "no-referrer".parse().unwrap());
-                response
-            },
-        ))
-        .with_state(Arc::new(PendingLogin {
-            expected_state: state,
-            authority: address.to_string(),
-            result: Mutex::new(Some(sender)),
-        }));
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let mut server = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                let _ = shutdown_rx.await;
-            })
-            .await
-    });
-    eprintln!("Sign in using your browser:\n{url}");
-    if !no_browser && open::that(url.as_str()).is_err() {
-        eprintln!("Open the URL above in your browser to continue.");
-    }
-    let received = tokio::time::timeout(Duration::from_secs(300), receiver).await;
-    let _ = shutdown_tx.send(());
-    if tokio::time::timeout(Duration::from_secs(2), &mut server)
-        .await
-        .is_err()
-    {
-        server.abort();
-    }
-    let code = received
-        .map_err(|_| CliError::auth("Login timed out; try again"))?
-        .map_err(|_| CliError::auth("Login listener closed"))?
-        .map_err(|_| CliError::auth("Login was denied"))?;
+    let code = listen_for_code(listener, state, &url, no_browser).await?;
     let token = oauth
         .exchange_code(AuthorizationCode::new(code))
         .set_pkce_verifier(verifier)
@@ -334,9 +352,7 @@ pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, C
         .ok_or_else(|| CliError::auth("OAuth response has no token expiration"))?;
     let refresh_token = token
         .refresh_token()
-        .ok_or_else(|| CliError::auth("OAuth response has no refresh token"))?
-        .secret()
-        .clone();
+        .ok_or_else(|| CliError::auth("OAuth response has no refresh token"))?;
     let granted = token
         .scopes()
         .ok_or_else(|| CliError::auth("OAuth response has no order scopes"))?;
@@ -365,7 +381,7 @@ pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, C
         token_endpoint: metadata.token_endpoint,
         revocation_endpoint: metadata.revocation_endpoint,
         access_token: token.access_token().secret().clone(),
-        refresh_token,
+        refresh_token: refresh_token.secret().clone(),
         expires_at: now() + expires_in.as_secs(),
     };
     save(profile, &api, &session)?;
@@ -373,7 +389,7 @@ pub(crate) async fn login(profile: Profile, no_browser: bool) -> Result<Value, C
 }
 
 pub(crate) async fn access_token(profile: Profile, api: &Url) -> Result<String, CliError> {
-    if let Ok(token) = std::env::var("ORDER_WIZARD_ACCESS_TOKEN") {
+    if let Ok(token) = std::env::var("ORDERCUE_ACCESS_TOKEN") {
         if !token.trim().is_empty() {
             return Ok(token);
         }
@@ -401,10 +417,12 @@ pub(crate) async fn access_token(profile: Profile, api: &Url) -> Result<String, 
     let expires_in = token
         .expires_in()
         .ok_or_else(|| CliError::auth("Refreshed token has no expiration"))?;
-    session.access_token = token.access_token().secret().clone();
+    session
+        .access_token
+        .clone_from(token.access_token().secret());
     session.expires_at = now() + expires_in.as_secs();
     if let Some(refresh) = token.refresh_token() {
-        session.refresh_token = refresh.secret().clone();
+        session.refresh_token.clone_from(refresh.secret());
     }
     save(profile, api, &session)?;
     Ok(session.access_token)

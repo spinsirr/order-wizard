@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { applyTemplate } from '../lib/fbTemplate';
-import { PriceRounding, FBCondition, DEFAULT_TEMPLATE } from '../types';
+import { DEFAULT_TEMPLATE, FBCondition, PriceRounding } from '../types';
 
 describe('applyTemplate', () => {
   const baseData = {
@@ -47,6 +47,7 @@ describe('applyTemplate', () => {
     const template = {
       ...DEFAULT_TEMPLATE,
       descriptionTemplate:
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Template placeholders are literal user input, with a dollar currency prefix.
         'Name: {productName}\nDesc: {productDescription}\nOrig: ${originalPrice}\nSell: ${sellingPrice}\nDate: {orderDate}\nCond: {condition}',
       condition: FBCondition.UsedLikeNew,
     };

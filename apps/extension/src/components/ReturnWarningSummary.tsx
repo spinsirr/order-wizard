@@ -1,7 +1,6 @@
 import { TriangleAlert } from 'lucide-react';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { cn } from '@/lib';
 import type { ReturnWarning } from '@/utils/returnWarnings';
 
 interface ReturnWarningSummaryProps {
@@ -15,47 +14,48 @@ export function ReturnWarningSummary({
   showingWarnings,
   onToggle,
 }: ReturnWarningSummaryProps) {
-  if (warnings.size === 0 && !showingWarnings) return null;
+  if (warnings.size === 0 && !showingWarnings) {
+    return null;
+  }
   const overdueCount = [...warnings.values()].filter(
     (warning) => warning.stage === 'overdue',
   ).length;
+  const summary =
+    warnings.size === 0
+      ? 'All return reminders cleared'
+      : `${warnings.size} ${warnings.size === 1 ? 'order needs' : 'orders need'} a return check`;
+  const details =
+    warnings.size === 0
+      ? summary
+      : `No reimbursement after 25+ days.${overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Confirm the return deadline on Amazon.`;
 
   return (
-    <Card
-      elevation="low"
+    <Alert
+      variant={overdueCount > 0 ? 'destructive' : 'default'}
+      className="flex items-center gap-2 px-2 py-1 [&>svg]:translate-y-0"
       role="status"
-      className="flex items-start gap-3 border border-border px-4 py-3"
+      aria-label={summary}
+      title={details}
     >
       <TriangleAlert
         aria-hidden="true"
-        className={cn(
-          'mt-0.5 h-4 w-4 shrink-0',
-          overdueCount > 0 ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
-        )}
+        className={overdueCount > 0 ? 'shrink-0' : 'shrink-0 text-warning!'}
       />
-      <div className="min-w-0 text-xs">
-        <p className={cn('font-semibold', overdueCount > 0 && 'text-destructive')}>
-          {warnings.size === 0
-            ? 'All return reminders cleared'
-            : `${warnings.size} ${warnings.size === 1 ? 'order needs' : 'orders need'} a return check`}
-        </p>
-        {warnings.size > 0 && (
-          <p className="mt-1 text-muted-foreground">
-            No reimbursement after 25+ days.
-            {overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Confirm the return deadline on
-            Amazon.
-          </p>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2 min-h-8"
-          onClick={onToggle}
-          aria-pressed={showingWarnings}
-        >
-          {showingWarnings ? 'Show all orders' : 'Review returns'}
-        </Button>
-      </div>
-    </Card>
+      <AlertTitle className="min-w-0 flex-1 truncate text-caption">
+        {warnings.size === 0
+          ? 'All clear'
+          : `${warnings.size} return ${warnings.size === 1 ? 'check' : 'checks'}`}
+      </AlertTitle>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 text-caption"
+        onClick={onToggle}
+        aria-pressed={showingWarnings}
+        aria-label={showingWarnings ? 'Show all orders' : 'Review returns'}
+      >
+        {showingWarnings ? 'Show all' : 'Review'}
+      </Button>
+    </Alert>
   );
 }

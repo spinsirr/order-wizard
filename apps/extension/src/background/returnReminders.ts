@@ -1,4 +1,7 @@
+import { LAST_ORDER_USER_KEY } from '@/lib/authStorage';
+import { orderKey } from '@/lib/orderStorage';
 import { LocalStorageRepository } from '@/repositories/LocalStorageRepository';
+import type { Order } from '@/types';
 import { getReturnWarning } from '@/utils/returnWarnings';
 
 export const RETURN_REMINDER_ALARM = 'ordercue-return-reminders';
@@ -6,38 +9,43 @@ export const RETURN_REMINDER_NOTIFICATION = 'ordercue-return-reminders';
 export const RETURN_REMINDER_STATE_KEY = 'returnReminderStages';
 const repository = new LocalStorageRepository();
 
-/** Recompute from saved orders; reminder state stays on this device and never changes an order. */
-export async function checkReturnReminders(now = new Date()): Promise<void> {
-  const orders = await repository.getAll();
-  const stored =
-    await chrome.storage.local.get<Record<string, Record<string, string>>>(
-      RETURN_REMINDER_STATE_KEY,
-    );
-  const previous: Record<string, string> = stored[RETURN_REMINDER_STATE_KEY] ?? {};
+function reminderSummary(orders: Order[], now: Date) {
   const current: Record<string, string> = {};
   let overdueCount = 0;
   let urgentCount = 0;
 
   for (const order of orders) {
     const warning = getReturnWarning(order, now);
-    if (!warning) continue;
-    // Sync can replace the device-local id; orderNumber is the repository's stable identity.
-    current[order.orderNumber] = `${warning.targetDate}:${warning.stage}`;
-    if (warning.stage === 'overdue') overdueCount += 1;
-    if (warning.stage === 'urgent') urgentCount += 1;
+    if (!warning) {
+      continue;
+    }
+    current[orderKey(order)] = `${warning.targetDate}:${warning.stage}`;
+    if (warning.stage === 'overdue') {
+      overdueCount += 1;
+    }
+    if (warning.stage === 'urgent') {
+      urgentCount += 1;
+    }
   }
 
+  return { current, overdueCount, urgentCount };
+}
+
+/** Recompute from saved orders; reminder state stays on this device and never changes an order. */
+export async function checkReturnReminders(now = new Date()): Promise<void> {
+  const workspace = await chrome.storage.local.get<{ last_order_user?: string }>(
+    LAST_ORDER_USER_KEY,
+  );
+  const orders = await repository.getAll(workspace[LAST_ORDER_USER_KEY] ?? 'local');
+  const stored =
+    await chrome.storage.local.get<Record<string, Record<string, string>>>(
+      RETURN_REMINDER_STATE_KEY,
+    );
+  const previous: Record<string, string> = stored[RETURN_REMINDER_STATE_KEY] ?? {};
+  const { current, overdueCount, urgentCount } = reminderSummary(orders, now);
+
   const count = Object.keys(current).length;
-  await chrome.action.setBadgeText({ text: count === 0 ? '' : count > 99 ? '99+' : String(count) });
-  await chrome.action.setBadgeBackgroundColor({
-    color: overdueCount + urgentCount > 0 ? '#b91c1c' : '#ab570a',
-  });
-  await chrome.action.setTitle({
-    title:
-      count === 0
-        ? 'Open Order Wizard'
-        : `Order Wizard · ${count} return ${count === 1 ? 'reminder' : 'reminders'}`,
-  });
+  await updateBadge(count, overdueCount + urgentCount > 0);
 
   const hasNewStage = Object.entries(current).some(([id, stage]) => previous[id] !== stage);
   const hasClearedOrder = Object.keys(previous).some((id) => !(id in current));
@@ -48,7 +56,9 @@ export async function checkReturnReminders(now = new Date()): Promise<void> {
 
   if (hasNewStage) {
     // Keep stages pending if notifications are disabled so enabling them does not lose reminders.
-    if ((await chrome.notifications.getPermissionLevel()) !== 'granted') return;
+    if ((await chrome.notifications.getPermissionLevel()) !== 'granted') {
+      return;
+    }
     await chrome.notifications.create(RETURN_REMINDER_NOTIFICATION, {
       type: 'basic',
       iconUrl: chrome.runtime.getURL('icon-128.png'),
@@ -58,7 +68,7 @@ export async function checkReturnReminders(now = new Date()): Promise<void> {
           : urgentCount > 0
             ? 'Return check urgent — nearing 30 days'
             : 'Reimbursement missing — consider a return',
-      message: `${count} ${count === 1 ? 'order has' : 'orders have'} not been reimbursed after 25+ days.${overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Open Order Wizard and confirm the return deadline on Amazon.`,
+      message: `${count} ${count === 1 ? 'order has' : 'orders have'} not been reimbursed after 25+ days.${overdueCount > 0 ? ` ${overdueCount} at 30+ days.` : ''} Open OrderCue and confirm the return deadline on Amazon.`,
       priority: overdueCount + urgentCount > 0 ? 2 : 1,
     });
   }
@@ -76,22 +86,28 @@ export function initializeReturnReminders(): void {
     pendingCheck = pendingCheck
       .then(() => checkReturnReminders())
       .catch((error: unknown) => {
-        console.error('Order Wizard return reminder check failed:', error);
+        console.error('OrderCue return reminder check failed:', error);
       });
     return pendingCheck;
   };
 
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === RETURN_REMINDER_ALARM) void check();
+    if (alarm.name === RETURN_REMINDER_ALARM) {
+      void check();
+    }
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.orders) void check();
+    if (area === 'local' && (changes['orders'] || changes[LAST_ORDER_USER_KEY])) {
+      void check();
+    }
   });
   chrome.runtime.onStartup.addListener(check);
   chrome.runtime.onInstalled.addListener(check);
   chrome.notifications.onPermissionLevelChanged.addListener(check);
   chrome.notifications.onClicked.addListener((id) => {
-    if (id !== RETURN_REMINDER_NOTIFICATION) return;
+    if (id !== RETURN_REMINDER_NOTIFICATION) {
+      return;
+    }
     void chrome.tabs
       .create({ url: chrome.runtime.getURL('sidepanel.html?view=returns') })
       .then(() => chrome.notifications.clear(id))
@@ -102,8 +118,23 @@ export function initializeReturnReminders(): void {
   void chrome.alarms
     .get(RETURN_REMINDER_ALARM)
     .then(async (alarm) => {
-      if (!alarm) await chrome.alarms.create(RETURN_REMINDER_ALARM, { periodInMinutes: 60 });
+      if (!alarm) {
+        await chrome.alarms.create(RETURN_REMINDER_ALARM, { periodInMinutes: 60 });
+      }
       await check();
     })
     .catch((error: unknown) => console.error('Could not schedule return reminders:', error));
+}
+
+async function updateBadge(count: number, urgent: boolean): Promise<void> {
+  await chrome.action.setBadgeText({ text: count === 0 ? '' : count > 99 ? '99+' : String(count) });
+  await chrome.action.setBadgeBackgroundColor({
+    color: urgent ? '#b91c1c' : '#ab570a',
+  });
+  await chrome.action.setTitle({
+    title:
+      count === 0
+        ? 'Open OrderCue'
+        : `OrderCue · ${count} return ${count === 1 ? 'reminder' : 'reminders'}`,
+  });
 }

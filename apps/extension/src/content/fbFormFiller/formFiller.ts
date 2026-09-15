@@ -1,216 +1,147 @@
-import type { FBListingData, FBCondition } from '@/types';
-import { FB_CONDITION_LABELS } from '@/types';
+import { waitElement } from '@1natsu/wait-element';
+import type { FBListingData } from '@/types';
+import { FB_CATEGORY_LABELS, FB_CONDITION_LABELS } from '@/types';
 
-function dispatchInputEvent(element: HTMLInputElement | HTMLTextAreaElement): void {
+export const FILL_FIELDS = [
+  'Title',
+  'Price',
+  'Description',
+  'Category',
+  'Condition',
+  'Location',
+  'Images',
+] as const;
+export type FillField = (typeof FILL_FIELDS)[number];
+export interface FillResult {
+  field: FillField;
+  error?: string | undefined;
+}
+
+async function waitFor<T extends Element>(find: () => T | null): Promise<T> {
+  return waitElement<T>('body', {
+    signal: AbortSignal.timeout(10_000),
+    detector: () => {
+      const element = find();
+      return element ? { isDetected: true, result: element } : { isDetected: false };
+    },
+  });
+}
+
+function labelledContainer(labelText: string): Element | null {
+  const span = [...document.querySelectorAll('span')].find(
+    (span) => span.textContent?.trim() === labelText,
+  );
+  return span?.closest('label') ?? span?.parentElement ?? null;
+}
+
+async function fillText(label: string, value: string): Promise<void> {
+  const element = await waitFor(
+    () =>
+      document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        `input[aria-label="${label}"], textarea[aria-label="${label}"]`,
+      ) ??
+      labelledContainer(label)?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        'input, textarea',
+      ) ??
+      null,
+  );
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+  if (!setter) {
+    throw new Error(`${label} does not accept text`);
+  }
+  setter.call(element, value);
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
-  const valueSetter = Object.getOwnPropertyDescriptor(element.constructor.prototype, 'value')?.set;
-  if (valueSetter) {
-    valueSetter.call(element, value);
-  } else {
-    element.value = value;
-  }
-  dispatchInputEvent(element);
-}
-
-/**
- * Find an input/textarea by its associated label text.
- * Facebook uses <label><div><span>Label</span><input/></div></label> structure.
- */
-function findInputByLabelText(labelText: string): HTMLInputElement | HTMLTextAreaElement | null {
-  // Find all spans and look for one with matching text
-  const spans = document.querySelectorAll('span');
-  for (const span of spans) {
-    if (span.textContent?.trim() === labelText) {
-      // Found the label span, now find the associated input
-      const label = span.closest('label');
-      if (label) {
-        const input = label.querySelector('input, textarea');
-        if (input) {
-          return input as HTMLInputElement | HTMLTextAreaElement;
-        }
-      }
-      // Also try finding input as sibling within same parent div
-      const parent = span.parentElement;
-      if (parent) {
-        const input = parent.querySelector('input, textarea');
-        if (input) {
-          return input as HTMLInputElement | HTMLTextAreaElement;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-async function waitForInputByLabel(labelText: string, timeout = 10000): Promise<HTMLInputElement | HTMLTextAreaElement> {
-  return new Promise((resolve, reject) => {
-    const input = findInputByLabelText(labelText);
-    if (input) {
-      resolve(input);
-      return;
-    }
-
-    const observer = new MutationObserver(() => {
-      const el = findInputByLabelText(labelText);
-      if (el) {
-        observer.disconnect();
-        resolve(el);
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    setTimeout(() => {
-      observer.disconnect();
-      reject(new Error(`Timeout waiting for input with label "${labelText}"`));
-    }, timeout);
-  });
-}
-
-/**
- * Select condition from FB's dropdown.
- * FB uses a custom dropdown that requires clicking to open, then selecting an option.
- */
-async function selectCondition(condition: FBCondition): Promise<void> {
-  const conditionLabel = FB_CONDITION_LABELS[condition];
-
-  // Find the Condition label and its associated dropdown
-  const spans = document.querySelectorAll('span');
-  for (const span of spans) {
-    if (span.textContent?.trim() === 'Condition') {
-      // Find the clickable dropdown element (usually a sibling or nearby element)
-      const container = span.closest('label') || span.parentElement;
-      if (!container) continue;
-
-      // Look for a div that acts as the dropdown trigger
-      const dropdownTrigger = container.querySelector('[role="combobox"], [aria-haspopup="listbox"]') ||
-        container.querySelector('div[tabindex="0"]');
-
-      if (dropdownTrigger) {
-        // Click to open dropdown
-        (dropdownTrigger as HTMLElement).click();
-        await new Promise(r => setTimeout(r, 500));
-
-        // Find and click the option
-        const options = document.querySelectorAll('[role="option"], [role="menuitem"]');
-        for (const option of options) {
-          if (option.textContent?.includes(conditionLabel)) {
-            (option as HTMLElement).click();
-            console.log('[FB FormFiller] Condition selected:', conditionLabel);
-            return;
-          }
-        }
-
-        // Try finding option by span text
-        const allSpans = document.querySelectorAll('span');
-        for (const s of allSpans) {
-          if (s.textContent?.trim() === conditionLabel) {
-            const clickable = s.closest('[role="option"], [role="menuitem"]') || s.parentElement;
-            if (clickable) {
-              (clickable as HTMLElement).click();
-              console.log('[FB FormFiller] Condition selected via span:', conditionLabel);
-              return;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  console.warn('[FB FormFiller] Could not find condition dropdown');
+async function selectOption(label: string, value: string): Promise<void> {
+  const trigger = await waitFor(
+    () =>
+      document.querySelector<HTMLElement>(`[role="combobox"][aria-label="${label}"]`) ??
+      labelledContainer(label)?.querySelector<HTMLElement>(
+        '[role="combobox"], [aria-haspopup="listbox"]',
+      ) ??
+      null,
+  );
+  trigger.click();
+  const option = await waitFor(
+    () =>
+      [...document.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"]')].find(
+        (option) => option.textContent?.trim() === value,
+      ) ?? null,
+  );
+  option.click();
 }
 
 async function uploadImages(images: string[]): Promise<void> {
-  // Find the file input or drop zone
-  const fileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
-  if (!fileInput) {
-    console.warn('[FB FormFiller] No file input found');
+  if (!images.length) {
     return;
   }
-
-  // Download images and create File objects
-  const files: File[] = [];
-  for (let i = 0; i < images.length; i++) {
-    try {
-      const response = await fetch(images[i]);
+  const input = await waitFor(() =>
+    document.querySelector<HTMLInputElement>('input[type="file"][accept*="image"]'),
+  );
+  const files = await Promise.all(
+    images.map(async (url, index) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Image download failed (${response.status})`);
+      }
       const blob = await response.blob();
-      const file = new File([blob], `image-${i}.jpg`, { type: 'image/jpeg' });
-      files.push(file);
-    } catch (e) {
-      console.warn('[FB FormFiller] Failed to download image:', images[i], e);
-    }
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Image URL did not return an image');
+      }
+      return new File([blob], `image-${index}`, { type: blob.type });
+    }),
+  );
+  const transfer = new DataTransfer();
+  for (const file of files) {
+    transfer.items.add(file);
   }
-
-  if (files.length === 0) return;
-
-  // Create a DataTransfer to set files
-  const dt = new DataTransfer();
-  for (const f of files) {
-    dt.items.add(f);
-  }
-  fileInput.files = dt.files;
-  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-export async function fillFBForm(listing: FBListingData): Promise<void> {
-  console.log('[FB FormFiller] Filling form with:', listing);
-
-  // Wait for page to load
-  await new Promise(r => setTimeout(r, 2000));
-
-  // Fill title
-  try {
-    const titleInput = await waitForInputByLabel('Title');
-    setNativeValue(titleInput, listing.title);
-    console.log('[FB FormFiller] Title filled');
-  } catch (e) {
-    console.warn('[FB FormFiller] Failed to fill title:', e);
+/** Returns every failed field to the user; retries can target only those fields. */
+export async function fillFBForm(
+  listing: FBListingData,
+  fields: readonly FillField[] = FILL_FIELDS,
+): Promise<FillResult[]> {
+  const actions: Record<FillField, () => Promise<void>> = {
+    Title: () => fillText('Title', listing.title),
+    Price: () => fillText('Price', listing.price),
+    Description: () => fillText('Description', listing.description),
+    Category: () => selectOption('Category', FB_CATEGORY_LABELS[listing.category]),
+    Condition: () => selectOption('Condition', FB_CONDITION_LABELS[listing.condition]),
+    Location: async () => {
+      if (!listing.pickupLocation.trim()) {
+        return;
+      }
+      await fillText('Location', listing.pickupLocation);
+      const option = await waitFor(
+        () =>
+          [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+            (option) => option.textContent?.trim() === listing.pickupLocation.trim(),
+          ) ?? null,
+      );
+      option.click();
+    },
+    Images: () => uploadImages(listing.images),
+  };
+  const results: FillResult[] = [];
+  for (const field of fields) {
+    try {
+      await actions[field]();
+      results.push({ field });
+    } catch (error) {
+      results.push({
+        field,
+        error: error instanceof Error ? error.message : 'Could not fill field',
+      });
+    }
   }
-
-  await new Promise(r => setTimeout(r, 300));
-
-  // Fill price
-  try {
-    const priceInput = await waitForInputByLabel('Price');
-    setNativeValue(priceInput, listing.price);
-    console.log('[FB FormFiller] Price filled');
-  } catch (e) {
-    console.warn('[FB FormFiller] Failed to fill price:', e);
-  }
-
-  await new Promise(r => setTimeout(r, 300));
-
-  // Fill description
-  try {
-    const descInput = await waitForInputByLabel('Description');
-    setNativeValue(descInput, listing.description);
-    console.log('[FB FormFiller] Description filled');
-  } catch (e) {
-    console.warn('[FB FormFiller] Failed to fill description:', e);
-  }
-
-  await new Promise(r => setTimeout(r, 300));
-
-  // Select condition
-  try {
-    await selectCondition(listing.condition);
-  } catch (e) {
-    console.warn('[FB FormFiller] Failed to select condition:', e);
-  }
-
-  await new Promise(r => setTimeout(r, 300));
-
-  // Upload images
-  try {
-    await uploadImages(listing.images);
-    console.log('[FB FormFiller] Images uploaded');
-  } catch (e) {
-    console.warn('[FB FormFiller] Failed to upload images:', e);
-  }
-
-  console.log('[FB FormFiller] Form filling complete');
+  return results;
 }

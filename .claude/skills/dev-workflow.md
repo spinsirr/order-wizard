@@ -1,80 +1,29 @@
 ---
 name: dev-workflow
-description: Use when developing, building, testing, or deploying Amazon Order Wizard. Covers extension build, server deploy, and common dev tasks.
+description: OrderCue local development and validation commands.
 ---
 
-# Amazon Order Wizard Development Workflow
+# OrderCue development
 
-## Quick Commands (justfile)
+Follow AGENTS.md and CLAUDE.md. `/ship` is disabled; independent review is not automatic.
 
-```bash
-just              # Show all available commands
-just dev          # Start MongoDB + extension dev server + Rust server
-just stop         # Kill all dev processes
-just build        # Build extension + server (copies to /mnt/c/order-wizard-ext)
-just check        # Run all checks (typecheck + lint + clippy)
-just lint-fix     # Auto-fix lint issues
-```
+- `just dev`: local MongoDB, extension dev server and Rust API.
+- `just check`: TypeScript, lint/format, design guard, business tests and Rust checks.
+- `just build`: extension and Rust server/CLI builds; no production deployment.
+- `bun run dev:workflow` in `apps/extension`: isolated full frontend demo on port 3001.
+- `bun run storybook`: interactive UI workbench on port 6006.
+- `bun run build-storybook`: validate workbench compilation.
+- `MONGODB_TEST_URI=... just test-mongo`: real adapter regression on disposable MongoDB.
 
-## Build & Deploy
+Configure extension matches, permissions and manifest metadata in `wxt.config.ts` and
+WXT entrypoints, not a generated manifest. Reload the built unpacked extension from
+`.output/chrome-mv3` in Chrome when checking extension integration.
 
-### Extension Build
-```bash
-just build        # Builds extension and copies to Windows path
-```
-After build, reload extension in `chrome://extensions`.
+REST handlers live in `apps/server/src/routes`, domain behavior in `application`,
+composition in `lib.rs`. Validate changes locally. Production releases use the
+matching version tag on main and `.github/workflows/release.yml`; see the release
+workflow notes. A local edit or build is not authorization to deploy.
 
-### Server Deploy (Fly.io)
-```bash
-cd apps/server
-fly deploy        # Deploy to production
-fly logs -a order-wizard-api  # View logs
-fly status -a order-wizard-api  # Check status
-```
-
-### Environment Variables (Fly.io)
-```bash
-fly secrets list -a order-wizard-api
-fly secrets set KEY=value -a order-wizard-api
-```
-
-## Project Structure
-
-- **apps/extension/** - React 19 Chrome extension (Vite + TailwindCSS 4)
-- **apps/server/** - Rust API (Axum + MongoDB)
-
-### Key Extension Paths
-- `src/content/` - Content scripts (Amazon scraping, FB form filler)
-- `src/components/` - React components
-- `src/hooks/` - React Query hooks
-- `src/contexts/` - Auth & Sync contexts
-- `src/types/` - TypeScript types
-- `public/manifest.json` - Extension manifest (fixed key for stable ID)
-
-### Key Server Paths
-- `src/main.rs` - Routes, CORS, rate limiting
-- `src/auth/` - JWT/JWKS validation
-- `src/routes/` - API handlers
-
-## Common Tasks
-
-### Add New Content Script Feature
-1. Add files to `src/content/`
-2. Update `public/manifest.json` content_scripts if new page match needed
-3. `just build` to rebuild
-
-### Modify API Endpoint
-1. Edit `apps/server/src/routes/`
-2. `cargo check` to verify
-3. `fly deploy` to deploy
-
-### Debug Production Issues
-```bash
-fly logs -a order-wizard-api          # Recent logs
-curl https://order-wizard-api.fly.dev/health  # Health check
-```
-
-## Extension ID
-Fixed via manifest key: `kfohphllanmaojigofaoedibjbcdlhmj`
-
-OAuth redirect URI: `https://kfohphllanmaojigofaoedibjbcdlhmj.chromiumapp.org/`
+Pure UI rendering, copy, styles and presentation are checked in Storybook. Preserve
+business tests for sync, account ownership, authentication, deletion, reminders,
+exports, data/protocol validation and Marketplace retries.

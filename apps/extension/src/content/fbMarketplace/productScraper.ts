@@ -19,7 +19,9 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
   const features: string[] = [];
   descriptionItems.forEach((item) => {
     const text = item.textContent?.trim();
-    if (text) features.push(text);
+    if (text) {
+      features.push(text);
+    }
   });
 
   // Try alternate description location
@@ -29,6 +31,24 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
     description = productDesc?.textContent?.trim() || '';
   }
 
+  const images = extractImages(doc);
+
+  // Try to detect category from breadcrumbs
+  const breadcrumbs = doc.querySelectorAll('#wayfinding-breadcrumbs_feature_div li a');
+  const category = breadcrumbs[0]?.textContent?.trim();
+
+  const currentPrice = extractCurrentPrice(doc);
+
+  return {
+    description,
+    features,
+    images: images.slice(0, 5), // Limit to 5 images
+    category,
+    currentPrice,
+  };
+}
+
+function extractImages(doc: Document): string[] {
   // Extract high-res images
   const images: string[] = [];
   const seenImageIds = new Set<string>();
@@ -36,14 +56,18 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
   // Helper to extract image ID from Amazon URL (e.g., "71eG75FTJJL" from ".../I/71eG75FTJJL._AC_SL1500_.jpg")
   const getImageId = (url: string): string | null => {
     const match = url.match(/\/I\/([A-Za-z0-9+_-]+)\./);
-    return match ? match[1] : null;
+    return match?.[1] ?? null;
   };
 
   // Helper to add image if not duplicate
   const addImage = (url: string): boolean => {
     const imageId = getImageId(url);
-    if (imageId && seenImageIds.has(imageId)) return false;
-    if (imageId) seenImageIds.add(imageId);
+    if (imageId && seenImageIds.has(imageId)) {
+      return false;
+    }
+    if (imageId) {
+      seenImageIds.add(imageId);
+    }
     images.push(url);
     return true;
   };
@@ -63,7 +87,7 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
       const imageMap = JSON.parse(dynamicImageData) as Record<string, [number, number]>;
       // Sort by largest dimension and get the biggest
       const sortedUrls = Object.entries(imageMap).sort(
-        ([, a], [, b]) => Math.max(b[0], b[1]) - Math.max(a[0], a[1])
+        ([, a], [, b]) => Math.max(b[0], b[1]) - Math.max(a[0], a[1]),
       );
       if (sortedUrls[0]) {
         addImage(sortedUrls[0][0]);
@@ -79,32 +103,7 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
     addImage(oldHires);
   }
 
-  // 3. Try colorImages from script tags (Amazon embeds image data in JS)
-  const scripts = doc.querySelectorAll('script:not([src])');
-  for (const script of scripts) {
-    const content = script.textContent || '';
-    // Check if this script contains colorImages data
-    if (content.includes("'colorImages'") || content.includes('"colorImages"')) {
-      // Extract all hiRes URLs directly with regex (more reliable than JSON parsing)
-      const hiResMatches = content.matchAll(/"hiRes"\s*:\s*"([^"]+)"/g);
-      for (const match of hiResMatches) {
-        const url = match[1];
-        if (url?.startsWith('http')) {
-          addImage(url);
-        }
-      }
-      // Also try "large" URLs as fallback
-      if (images.length === 0) {
-        const largeMatches = content.matchAll(/"large"\s*:\s*"([^"]+)"/g);
-        for (const match of largeMatches) {
-          const url = match[1];
-          if (url?.startsWith('http')) {
-            addImage(url);
-          }
-        }
-      }
-    }
-  }
+  extractScriptImages(doc, images, addImage);
 
   // 4. Fallback: Main image src with high-res conversion
   const mainImage = landingImage as HTMLImageElement | null;
@@ -121,10 +120,10 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
     }
   }
 
-  // Try to detect category from breadcrumbs
-  const breadcrumbs = doc.querySelectorAll('#wayfinding-breadcrumbs_feature_div li a');
-  const category = breadcrumbs[0]?.textContent?.trim();
+  return images;
+}
 
+function extractCurrentPrice(doc: Document): string | undefined {
   // Extract current price
   let currentPrice: string | undefined;
 
@@ -157,11 +156,37 @@ export async function scrapeProductPage(productUrl: string): Promise<ProductDeta
     }
   }
 
-  return {
-    description,
-    features,
-    images: images.slice(0, 5), // Limit to 5 images
-    category,
-    currentPrice,
-  };
+  return currentPrice;
+}
+
+function extractScriptImages(
+  doc: Document,
+  images: string[],
+  addImage: (url: string) => boolean,
+): void {
+  // 3. Try colorImages from script tags (Amazon embeds image data in JS)
+  const scripts = doc.querySelectorAll('script:not([src])');
+  for (const script of scripts) {
+    const content = script.textContent || '';
+    if (!content.includes("'colorImages'") && !content.includes('"colorImages"')) {
+      continue;
+    }
+    addScriptMatches(content, /"hiRes"\s*:\s*"([^"]+)"/g, addImage);
+    if (images.length === 0) {
+      addScriptMatches(content, /"large"\s*:\s*"([^"]+)"/g, addImage);
+    }
+  }
+}
+
+function addScriptMatches(
+  content: string,
+  pattern: RegExp,
+  addImage: (url: string) => boolean,
+): void {
+  for (const match of content.matchAll(pattern)) {
+    const url = match[1];
+    if (url?.startsWith('http')) {
+      addImage(url);
+    }
+  }
 }

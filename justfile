@@ -23,21 +23,22 @@ stop:
 build:
     cd apps/extension && bun run build
     cargo build --workspace --release
-    rm -rf /mnt/c/order-wizard-ext
-    cp -r apps/extension/.output/chrome-mv3 /mnt/c/order-wizard-ext
 
 # Run all checks (typecheck + lint + test + clippy)
 check:
+    bun scripts/set-version.ts --check
     cd apps/extension && bun run typecheck
     cd apps/extension && bun run lint
+    cd apps/extension && bun run check:design
     cd apps/extension && bun run test
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo test --workspace
+    cargo clippy --workspace --all-targets --locked -- -D warnings
+    cargo test --workspace --locked
 
-# Run extension unit tests
+# Run extension, backend and CLI tests
 test:
     cd apps/extension && bun run test
+    cargo test --workspace --locked
 
 # TypeScript type check
 typecheck:
@@ -82,3 +83,8 @@ bump version:
 setup:
     git config core.hooksPath .githooks
     @echo "Git hooks configured"
+
+# Run the real MongoDB adapter regression against a disposable test database
+# Set MONGODB_TEST_URI to your local MongoDB instance.
+test-mongo:
+    cargo test -p server --lib mongo_replication --locked -- --ignored

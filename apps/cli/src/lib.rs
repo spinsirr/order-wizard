@@ -12,6 +12,11 @@ use auth::Profile;
 use command::{AuthCommand, Command, OrdersCommand};
 use serde_json::Value;
 
+/// Execute a command against the configured `OrderCue` API.
+///
+/// # Errors
+/// Returns an error for missing credentials, invalid configuration, network failures,
+/// or an API response that rejects the operation or violates the JSON contract.
 pub async fn execute(cli: Cli) -> Result<Value, CliError> {
     match cli.command {
         Command::Auth { command } => {

@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { Order } from '../types';
 import {
+  filterAndSortOrders,
+  filterOrdersByStatus,
   searchOrders,
   sortOrders,
-  filterOrdersByStatus,
-  filterAndSortOrders,
 } from '../utils/orderFilters';
-import type { Order } from '../types';
 
 function makeOrder(overrides: Partial<Order> = {}): Order {
   return {
@@ -36,26 +36,23 @@ describe('filterOrdersByStatus', () => {
   it('filters by uncommented', () => {
     const result = filterOrdersByStatus(orders, 'uncommented');
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('1');
+    expect(result[0]?.id).toBe('1');
   });
 
   it('filters by commented', () => {
     const result = filterOrdersByStatus(orders, 'commented');
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('2');
+    expect(result[0]?.id).toBe('2');
   });
 
   it('filters by reimbursed', () => {
     const result = filterOrdersByStatus(orders, 'reimbursed');
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('3');
+    expect(result[0]?.id).toBe('3');
   });
 
   it('returns empty array when no match', () => {
-    const result = filterOrdersByStatus(
-      [makeOrder({ status: 'uncommented' })],
-      'reimbursed',
-    );
+    const result = filterOrdersByStatus([makeOrder({ status: 'uncommented' })], 'reimbursed');
     expect(result).toHaveLength(0);
   });
 });
@@ -111,7 +108,7 @@ describe('sortOrders', () => {
       makeOrder({ id: 'b', createdAt: '2025-06-01T00:00:00Z' }),
     ];
     const result = sortOrders(withMissing, 'created-desc');
-    expect(result[0].id).toBe('b');
+    expect(result[0]?.id).toBe('b');
   });
 });
 
@@ -141,8 +138,8 @@ describe('filterAndSortOrders', () => {
     // Filter uncommented, no search, newest first
     const result = filterAndSortOrders(orders, '', 'uncommented', 'created-desc');
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe('3');
-    expect(result[1].id).toBe('1');
+    expect(result[0]?.id).toBe('3');
+    expect(result[1]?.id).toBe('1');
   });
 
   it('returns empty when search matches nothing', () => {
@@ -166,6 +163,6 @@ describe('searchOrders', () => {
     const result = searchOrders(orders, 'fragile');
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('1');
+    expect(result[0]?.id).toBe('1');
   });
 });

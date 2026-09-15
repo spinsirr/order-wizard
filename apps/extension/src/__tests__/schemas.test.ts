@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { OrderSchema, ScrapedOrderDataSchema } from '../schemas/order';
+import { describe, expect, it } from 'vitest';
 import { FBListingTemplateSchema } from '../schemas/fbListing';
-import { PriceRounding, FBCondition, FBCategory } from '../types';
+import { OrderSchema, ScrapedOrderDataSchema } from '../schemas/order';
+import { FBCategory, FBCondition, PriceRounding } from '../types';
 
 describe('OrderSchema', () => {
   const validOrder = {
@@ -20,6 +20,18 @@ describe('OrderSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts opaque server identities, missing images, and nanosecond versions', () => {
+    expect(
+      OrderSchema.safeParse({
+        ...validOrder,
+        id: 'opaque-id',
+        productImage: '',
+        updatedAt: '2026-09-15T12:00:00.123456789Z',
+      }).success,
+    ).toBe(true);
+    expect(OrderSchema.safeParse({ ...validOrder, updatedAt: 'not-a-date' }).success).toBe(false);
+  });
+
   it('accepts order with optional note', () => {
     const result = OrderSchema.safeParse({ ...validOrder, note: 'some note' });
     expect(result.success).toBe(true);
@@ -31,8 +43,8 @@ describe('OrderSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects invalid UUID', () => {
-    const result = OrderSchema.safeParse({ ...validOrder, id: 'not-a-uuid' });
+  it('rejects an empty order identity', () => {
+    const result = OrderSchema.safeParse({ ...validOrder, id: '' });
     expect(result.success).toBe(false);
   });
 
@@ -114,7 +126,11 @@ describe('FBListingTemplateSchema', () => {
   });
 
   it('accepts 0 and 100 as edge discount values', () => {
-    expect(FBListingTemplateSchema.safeParse({ ...validTemplate, discountPercent: 0 }).success).toBe(true);
-    expect(FBListingTemplateSchema.safeParse({ ...validTemplate, discountPercent: 100 }).success).toBe(true);
+    expect(
+      FBListingTemplateSchema.safeParse({ ...validTemplate, discountPercent: 0 }).success,
+    ).toBe(true);
+    expect(
+      FBListingTemplateSchema.safeParse({ ...validTemplate, discountPercent: 100 }).success,
+    ).toBe(true);
   });
 });

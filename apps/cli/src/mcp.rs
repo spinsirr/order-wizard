@@ -42,13 +42,13 @@ fn default_limit() -> u8 {
 
 #[derive(Clone)]
 struct OrderTools;
-fn tool_error(error: CliError) -> CallToolResult {
+fn tool_error(error: &CliError) -> CallToolResult {
     CallToolResult::error(vec![rmcp::model::ContentBlock::text(error.as_json())])
 }
 async fn api() -> Result<ApiClient, CallToolResult> {
     ApiClient::from_environment(Profile::Mcp)
         .await
-        .map_err(tool_error)
+        .map_err(|error| tool_error(&error))
 }
 
 #[tool_router]
@@ -71,7 +71,7 @@ impl OrderTools {
             .list_orders(p.status, p.limit)
             .await
             .map(Json)
-            .map_err(tool_error)
+            .map_err(|error| tool_error(&error))
     }
     #[tool(
         name = "orders_search",
@@ -91,7 +91,7 @@ impl OrderTools {
             .search_orders(&p.query, p.status, p.limit)
             .await
             .map(Json)
-            .map_err(tool_error)
+            .map_err(|error| tool_error(&error))
     }
     #[tool(
         name = "orders_get",
@@ -111,7 +111,7 @@ impl OrderTools {
             .get_order(&p.id)
             .await
             .map(Json)
-            .map_err(tool_error)
+            .map_err(|error| tool_error(&error))
     }
     #[tool(
         name = "orders_set_status",
@@ -131,7 +131,7 @@ impl OrderTools {
             .update_status(&p.id, p.status)
             .await
             .map(Json)
-            .map_err(tool_error)
+            .map_err(|error| tool_error(&error))
     }
     #[tool(
         name = "orders_set_note",
@@ -151,11 +151,11 @@ impl OrderTools {
             .update_note(&p.id, &p.note)
             .await
             .map(Json)
-            .map_err(tool_error)
+            .map_err(|error| tool_error(&error))
     }
 }
 #[tool_handler(
-    name = "order-wizard",
+    name = "ordercue",
     instructions = "Read orders and update only their status or note. Creating and deleting orders are unavailable."
 )]
 impl ServerHandler for OrderTools {}
@@ -178,7 +178,7 @@ mod tests {
     fn stdio_exposes_exactly_the_five_order_tools() {
         let tools = OrderTools::tool_router().list_all();
         let mut names: Vec<_> = tools.iter().map(|tool| tool.name.as_ref()).collect();
-        names.sort();
+        names.sort_unstable();
         assert_eq!(
             names,
             [

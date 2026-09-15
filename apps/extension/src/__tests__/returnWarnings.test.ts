@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type Order, OrderStatus } from '@/types';
-import { getReturnWarning, getReturnWarningLabel } from '@/utils/returnWarnings';
+import { getReturnWarning } from '@/utils/returnWarnings';
 
 function order(overrides: Partial<Order> = {}): Order {
   return {
@@ -27,9 +27,11 @@ describe('return reminder timing', () => {
     [31, 'overdue', -1],
   ])('at %i days, uses stage %s with %s days remaining', (age, stage, remaining) => {
     const warning = getReturnWarning(order(), new Date(2026, 7, 1 + Number(age), 23, 59));
-    if (stage === null) expect(warning).toBeNull();
-    else
+    if (stage === null) {
+      expect(warning).toBeNull();
+    } else {
       expect(warning).toMatchObject({ stage, daysRemaining: remaining, targetDate: '2026-08-31' });
+    }
   });
 
   it.each(Object.values(OrderStatus))('handles reimbursement status %s', (status) => {
@@ -94,16 +96,5 @@ describe('return reminder timing', () => {
     expect(
       getReturnWarning(order({ orderDate: '2026-10-10' }), new Date(2026, 10, 4, 23, 59)),
     ).toMatchObject({ daysSinceOrder: 25 });
-  });
-
-  it('distinguishes a countdown, today, and a passed estimate without declaring return eligibility', () => {
-    for (const [age, label] of [
-      [29, '1 day to 30-day mark · consider returning'],
-      [30, '30-day mark today · review return now'],
-      [31, '31 days since order · check return options now'],
-    ] as const) {
-      const warning = getReturnWarning(order(), new Date(2026, 7, 1 + age));
-      expect(warning && getReturnWarningLabel(warning)).toBe(label);
-    }
   });
 });

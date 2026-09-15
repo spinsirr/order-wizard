@@ -39,7 +39,7 @@ Extension 和 CLI 都是可被用户检查的分发软件，不能安全保存 c
 建议建立 URL 形式的 resource-server identifier，例如占位符：
 
 ```text
-https://api.order-wizard.example
+https://api.ordercue.example
 ```
 
 URL identifier 既能用于 resource binding，也会成为 custom scope 的前缀。最小 scope 集与现有 application capabilities 一一对应：
@@ -156,5 +156,5 @@ AWS API reference 允许 callback 使用 `http://localhost`、`http://127.0.0.1`
 - CLI 与 MCP 使用独立公共客户端，各自仅允许三项 agent scopes，无 client secret。两者使用相同的已注册 HTTPS callback，均已在 Cognito 保存。
 - 客户端 access/ID token 时效为 15 分钟、refresh 为五天；开启 revoke 与 prevent-user-existence-errors，仅保留 refresh SDK flow。多个本机进程共享一份登录，暂不开启 refresh rotation。
 - CLI 登录只请求订单 scopes，不请求 ID token。凭据由 OS credential store 保存，按 API 地址和 CLI/MCP profile 隔离；登录后调用 `/me` 验证 audience/client 配置，后续请求自动刷新。
-- Claude Code 使用 `order-wizard mcp` stdio 接口和独立 MCP 登录，无需替 Claude Code 注册它自己的 HTTP loopback callback。HTTP MCP 仍保留给预注册客户端。
+- Claude Code 使用 `ordercue mcp` stdio 接口和独立 MCP 登录，无需替 Claude Code 注册它自己的 HTTP loopback callback。HTTP MCP 仍保留给预注册客户端。
 - GitHub Secrets 保存两类公共 client ID，发布流程把它们写入 Fly runtime secrets。生产路径需要在新版本部署后完成实际 Cognito 登录验证；单元测试不能替代这一步。

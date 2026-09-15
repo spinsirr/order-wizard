@@ -1,10 +1,10 @@
+import { FBListingTemplateSchema } from '@/schemas';
 import {
   DEFAULT_TEMPLATE,
-  type FBListingTemplate,
   FB_CONDITION_LABELS,
+  type FBListingTemplate,
   PriceRounding,
 } from '@/types';
-import { FBListingTemplateSchema } from '@/schemas';
 
 const TEMPLATE_KEY = 'fb_listing_template';
 
@@ -12,7 +12,9 @@ export async function getTemplate(): Promise<FBListingTemplate> {
   const result = await chrome.storage.local.get(TEMPLATE_KEY);
   const stored = result[TEMPLATE_KEY];
 
-  if (!stored) return DEFAULT_TEMPLATE;
+  if (!stored) {
+    return DEFAULT_TEMPLATE;
+  }
 
   const parsed = FBListingTemplateSchema.safeParse(stored);
   return parsed.success ? parsed.data : DEFAULT_TEMPLATE;
@@ -41,7 +43,8 @@ export function applyTemplate(
     productDescription: string;
     originalPrice: string;
     orderDate: string;
-  }
+    orderNumber?: string;
+  },
 ): { description: string; price: string } {
   const priceNum = parseFloat(data.originalPrice.replace(/[^0-9.]/g, ''));
   const discountedPrice = priceNum * (template.discountPercent / 100);
@@ -51,7 +54,7 @@ export function applyTemplate(
       ? roundedPrice.toFixed(2)
       : roundedPrice.toString();
 
-  const description = template.descriptionTemplate
+  let description = template.descriptionTemplate
     .replace(/{productName}/g, data.productName)
     .replace(/{productDescription}/g, data.productDescription)
     .replace(/{originalPrice}/g, data.originalPrice.replace(/[^0-9.]/g, ''))
@@ -59,5 +62,10 @@ export function applyTemplate(
     .replace(/{orderDate}/g, data.orderDate)
     .replace(/{condition}/g, FB_CONDITION_LABELS[template.condition]);
 
+  if (template.includeOrderLink && data.orderNumber) {
+    description += `
+
+Amazon order: https://www.amazon.com/gp/css/order-details?orderID=${encodeURIComponent(data.orderNumber)}`;
+  }
   return { description, price: sellingPrice };
 }

@@ -38,7 +38,9 @@ function parseOrderDay(value: string): number | null {
   let day: number;
 
   if (iso) {
-    if (text.includes('T') && !Number.isFinite(Date.parse(text))) return null;
+    if (text.includes('T') && !Number.isFinite(Date.parse(text))) {
+      return null;
+    }
     year = Number(iso[1]);
     month = Number(iso[2]) - 1;
     day = Number(iso[3]);
@@ -65,14 +67,20 @@ function parseOrderDay(value: string): number | null {
 }
 
 export function getReturnWarning(order: Order, now = new Date()): ReturnWarning | null {
-  if (order.deletedAt || order.status === OrderStatus.Reimbursed) return null;
+  if (order.deletedAt || order.status === OrderStatus.Reimbursed) {
+    return null;
+  }
   const orderDay = parseOrderDay(order.orderDate);
-  if (orderDay === null || !Number.isFinite(now.getTime())) return null;
+  if (orderDay === null || !Number.isFinite(now.getTime())) {
+    return null;
+  }
 
   // Calendar arithmetic keeps the countdown stable across daylight-saving changes.
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / DAY_MS;
   const daysSinceOrder = today - orderDay;
-  if (daysSinceOrder < RETURN_WARNING_DAY) return null;
+  if (daysSinceOrder < RETURN_WARNING_DAY) {
+    return null;
+  }
 
   return {
     stage:
@@ -91,6 +99,8 @@ export function getReturnWarningLabel(warning: ReturnWarning): string {
   if (warning.daysRemaining < 0) {
     return `${warning.daysSinceOrder} days since order · check return options now`;
   }
-  if (warning.daysRemaining === 0) return '30-day mark today · review return now';
+  if (warning.daysRemaining === 0) {
+    return '30-day mark today · review return now';
+  }
   return `${warning.daysRemaining} ${warning.daysRemaining === 1 ? 'day' : 'days'} to 30-day mark · consider returning`;
 }

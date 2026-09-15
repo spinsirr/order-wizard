@@ -1,0 +1,16 @@
+/* The product owns its theme; these rules only size Storybook's canvas. */
+body.sb-show-main {
+  overflow: auto;
+}
+
+#storybook-root {
+  min-height: 100vh;
+}
+
+.story-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}

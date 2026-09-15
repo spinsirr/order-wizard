@@ -1,0 +1,16 @@
+diff --git a/dist/init-yCWd5sZ8.mjs b/dist/init-yCWd5sZ8.mjs
+index 3ebd6d5d6c30392b04a81dc85d8ec6f08f4533a6..96f14e04c267321363eaae9df31644f42b1e36c6 100644
+--- a/dist/init-yCWd5sZ8.mjs
++++ b/dist/init-yCWd5sZ8.mjs
+@@ -44,9 +44,9 @@ var CwsApi = class {
+ 				"x-goog-api-version": "2"
+ 			}
+ 		});
+-		if (res.uploadState === "FAILURE") {
++		if (res.uploadState !== "SUCCESS") {
+ 			const errors = res.itemError?.map((e) => `${e.error_code}: ${e.error_detail}`).join("\n");
+-			throw new Error(`Chrome Web Store upload failed:\n${errors}`);
++			throw new Error(`Chrome Web Store upload did not succeed (${res.uploadState ?? "MISSING_STATE"}):\n${errors ?? "No error details returned"}`);
+ 		}
+ 	}
+ 	async submitForReview(params) {

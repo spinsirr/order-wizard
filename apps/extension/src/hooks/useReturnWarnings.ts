@@ -21,7 +21,9 @@ export function useReturnWarnings(orders: Order[]) {
     const warnings = new Map<string, ReturnWarning>();
     for (const order of orders) {
       const warning = getReturnWarning(order, now);
-      if (warning) warnings.set(order.id, warning);
+      if (warning) {
+        warnings.set(order.id, warning);
+      }
     }
     return warnings;
   }, [orders, now]);

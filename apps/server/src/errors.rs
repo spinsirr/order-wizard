@@ -20,6 +20,8 @@ pub struct ApiError {
 pub enum AppError {
     /// Authenticated caller lacks the required capability
     Forbidden,
+    /// An explicit client version is older than the current order
+    Conflict,
     /// Resource not found
     NotFound(&'static str),
     /// Invalid request data
@@ -58,10 +60,15 @@ impl IntoResponse for AppError {
 
         let (status, code, message) = match self {
             AppError::Forbidden => unreachable!("forbidden errors return above"),
+            AppError::Conflict => (
+                StatusCode::CONFLICT,
+                "CONFLICT",
+                "Order changed; fetch the latest version before editing".to_string(),
+            ),
             AppError::NotFound(resource) => (
                 StatusCode::NOT_FOUND,
                 "NOT_FOUND",
-                format!("{} not found", resource),
+                format!("{resource} not found"),
             ),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg),
             AppError::Database(msg) => {
@@ -85,6 +92,7 @@ impl From<ApplicationError> for AppError {
     fn from(error: ApplicationError) -> Self {
         match error {
             ApplicationError::Forbidden => AppError::Forbidden,
+            ApplicationError::Conflict => AppError::Conflict,
             ApplicationError::InvalidInput(message) => AppError::bad_request(message),
             ApplicationError::NotFound => AppError::not_found("Order"),
             ApplicationError::Repository(message) => AppError::Database(message),

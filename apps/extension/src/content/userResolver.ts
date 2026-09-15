@@ -14,19 +14,11 @@ let cachedUser: StoredUser | null = null;
 
 async function readCurrentUserFromStorage(): Promise<StoredUser | null> {
   if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([CURRENT_USER_STORAGE_KEY], (result) => {
-        if (chrome.runtime?.lastError) {
-          console.error(
-            'Failed to read current user from chrome.storage:',
-            chrome.runtime.lastError,
-          );
-          resolve(null);
-          return;
-        }
-        resolve((result[CURRENT_USER_STORAGE_KEY] as StoredUser | undefined) ?? null);
-      });
-    });
+    const result = await chrome.storage.local.get<{
+      currentUser?: StoredUser;
+      last_order_user?: string;
+    }>([CURRENT_USER_STORAGE_KEY, 'last_order_user']);
+    return result.currentUser ?? (result.last_order_user ? { id: result.last_order_user } : null);
   }
 
   const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
@@ -50,9 +42,8 @@ if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
       return;
     }
 
-    if (CURRENT_USER_STORAGE_KEY in changes) {
-      const change = changes[CURRENT_USER_STORAGE_KEY];
-      cachedUser = (change?.newValue as StoredUser | undefined) ?? null;
+    if (CURRENT_USER_STORAGE_KEY in changes || 'last_order_user' in changes) {
+      cachedUser = null;
     }
   });
 }

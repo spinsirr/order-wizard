@@ -1,18 +1,23 @@
+import type { ContentScriptContext } from 'wxt/utils/content-script-context';
+import { applyTemplate, getTemplate } from '@/lib';
+import { changeListingDraft } from '@/lib/listingDraft';
+import type { FBListingData, ProductDetails } from '@/types';
 import { scrapeOrderData } from '../scraper';
-import { scrapeProductPage } from './productScraper';
 import {
   injectFBButtons,
   setupFBMutationObserver,
+  showFBButtonError,
   showFBButtonLoading,
   showFBButtonReady,
-  showFBButtonError,
 } from './injector';
 import { showPreviewModal } from './previewModal';
-import { getTemplate, applyTemplate } from '@/lib';
-import type { FBListingData, ProductDetails } from '@/types';
-import { FB_PENDING_LISTING_KEY } from '@/constants';
+import { scrapeProductPage } from './productScraper';
 
-async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Promise<void> {
+async function handleListOnFB(
+  ctx: ContentScriptContext,
+  orderCard: Element,
+  button: HTMLButtonElement,
+): Promise<void> {
   showFBButtonLoading(button);
 
   try {
@@ -27,7 +32,11 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
     const template = await getTemplate();
 
     // Scrape product details if we have URL
-    let productDetails: ProductDetails = { description: '', features: [], images: [orderData.productImage] };
+    let productDetails: ProductDetails = {
+      description: '',
+      features: [],
+      images: [orderData.productImage],
+    };
     if (productUrl) {
       try {
         productDetails = await scrapeProductPage(productUrl);
@@ -49,11 +58,14 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
       productDescription: productDetails.description || productDetails.features.join('\n'),
       originalPrice: basePrice,
       orderDate: orderData.orderDate,
+      orderNumber: orderData.orderNumber,
     });
 
     // Prepare listing data - truncate title smartly at comma/space
     const truncateTitle = (name: string, maxLen: number): string => {
-      if (name.length <= maxLen) return name;
+      if (name.length <= maxLen) {
+        return name;
+      }
       const truncated = name.slice(0, maxLen);
       // Try to find a comma or space to break at
       const lastComma = truncated.lastIndexOf(',');
@@ -83,15 +95,25 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
 
     // Show preview modal
     showPreviewModal(
+      ctx,
       listing,
-      async (finalListing) => {
-        // Store listing and open FB Marketplace
-        await chrome.storage.local.set({ [FB_PENDING_LISTING_KEY]: finalListing });
-        chrome.runtime.sendMessage({ type: 'OPEN_FB_MARKETPLACE' });
+      button,
+      (finalListing) => {
+        void changeListingDraft({ kind: 'save', listing: finalListing })
+          .then(() => chrome.runtime.sendMessage({ type: 'OPEN_FB_MARKETPLACE' }))
+          .then((result: { ok?: boolean; error?: string }) => {
+            if (!result?.ok) {
+              throw new Error(result?.error ?? 'Could not open Marketplace');
+            }
+          })
+          .catch((error: unknown) => {
+            console.error('Could not open saved listing:', error);
+            showFBButtonError(button, 'Could not open listing');
+          });
       },
       () => {
         // Cancelled
-      }
+      },
     );
   } catch (error) {
     console.error('Failed to prepare FB listing:', error);
@@ -100,8 +122,10 @@ async function handleListOnFB(orderCard: Element, button: HTMLButtonElement): Pr
   }
 }
 
-export function initFBMarketplace(): void {
-  console.log('FB Marketplace listing feature initialized');
-  injectFBButtons(handleListOnFB);
-  setupFBMutationObserver(handleListOnFB);
+export function initFBMarketplace(ctx: ContentScriptContext): void {
+  console.info('FB Marketplace listing feature initialized');
+  const handleClick = (card: Element, button: HTMLButtonElement) =>
+    handleListOnFB(ctx, card, button);
+  injectFBButtons(handleClick);
+  setupFBMutationObserver(handleClick);
 }

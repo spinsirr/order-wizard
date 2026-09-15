@@ -101,7 +101,7 @@ impl ApiClient {
     fn order_endpoint(&self, id: &str) -> Result<Url, CliError> {
         let mut url = self.endpoint("agent/orders")?;
         url.path_segments_mut()
-            .map_err(|_| CliError::config("API URL cannot be a base URL"))?
+            .map_err(|()| CliError::config("API URL cannot be a base URL"))?
             .push(id);
         Ok(url)
     }
@@ -109,7 +109,7 @@ impl ApiClient {
     fn order_operation_endpoint(&self, id: &str, operation: &str) -> Result<Url, CliError> {
         let mut url = self.order_endpoint(id)?;
         url.path_segments_mut()
-            .map_err(|_| CliError::config("API URL cannot be a base URL"))?
+            .map_err(|()| CliError::config("API URL cannot be a base URL"))?
             .push(operation);
         Ok(url)
     }

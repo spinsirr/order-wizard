@@ -7,6 +7,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 mod mongo_repository;
 #[cfg(test)]
 mod test_support;
+mod timestamps;
 
 pub(crate) use mongo_repository::MongoOrderRepository;
 #[cfg(test)]
@@ -123,6 +124,7 @@ impl Capability {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ApplicationError {
     Forbidden,
+    Conflict,
     InvalidInput(String),
     NotFound,
     Repository(String),
@@ -157,11 +159,15 @@ pub struct UpsertOrder {
     pub deleted_at: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct UpdateOrder {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<OrderStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<String>,
 }
 
@@ -178,6 +184,15 @@ impl UpdateOrder {
             && self.note.is_none()
             && self.updated_at.is_none()
             && self.deleted_at.is_none()
+    }
+
+    fn at_version(&self, existing: &Order, now: &str) -> Result<Self, ApplicationError> {
+        let version = timestamps::for_update(existing, self.updated_at.as_deref(), now)?;
+        Ok(Self {
+            updated_at: Some(version.clone()),
+            deleted_at: self.deleted_at.as_ref().map(|_| version),
+            ..self.clone()
+        })
     }
 }
 
@@ -223,32 +238,36 @@ pub(crate) trait TenantScopedOrderRepository: Send + Sync {
         user_id: &UserId,
         order: Order,
     ) -> Result<UpsertResult, ApplicationError>;
-    async fn update_status(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        status: OrderStatus,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError>;
-    async fn update_note(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        note: &str,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError>;
-    async fn delete(&self, user_id: &UserId, order_id: &str) -> Result<bool, ApplicationError>;
     async fn update(
         &self,
         user_id: &UserId,
         order_id: &str,
         update: UpdateOrder,
+        now: &str,
     ) -> Result<Option<Order>, ApplicationError>;
     async fn delete_many(
         &self,
         user_id: &UserId,
         order_ids: &[String],
-    ) -> Result<usize, ApplicationError>;
+        updated_at: &str,
+    ) -> Result<usize, ApplicationError> {
+        let mut count = 0;
+        for id in order_ids {
+            let deleted = self
+                .update(
+                    user_id,
+                    id,
+                    UpdateOrder {
+                        deleted_at: Some(updated_at.into()),
+                        ..UpdateOrder::default()
+                    },
+                    updated_at,
+                )
+                .await?;
+            count += usize::from(deleted.is_some());
+        }
+        Ok(count)
+    }
 }
 
 #[derive(Clone)]
@@ -278,7 +297,14 @@ impl OrderApplication {
 
     pub async fn list_orders(&self, principal: &Principal) -> Result<Vec<Order>, ApplicationError> {
         principal.require(Capability::ReadOrders)?;
-        self.repository.list(principal.user_id()).await
+        let orders = self.repository.list(principal.user_id()).await?;
+        Ok(orders
+            .into_iter()
+            .filter(|order| {
+                principal.capabilities.contains(Capability::SyncOrders)
+                    || order.deleted_at.is_none()
+            })
+            .collect())
     }
 
     pub async fn get_order(
@@ -290,6 +316,7 @@ impl OrderApplication {
         self.repository
             .get(principal.user_id(), order_id)
             .await?
+            .filter(|order| order.deleted_at.is_none())
             .ok_or(ApplicationError::NotFound)
     }
 
@@ -323,6 +350,7 @@ impl OrderApplication {
     ) -> Result<Order, ApplicationError> {
         principal.require(Capability::SyncOrders)?;
         let order = input.into_order(principal.user_id());
+        timestamps::validate_order(&order)?;
         self.repository
             .upsert_if_newer(principal.user_id(), order)
             .await
@@ -338,7 +366,15 @@ impl OrderApplication {
         principal.require(Capability::UpdateStatus)?;
         let updated_at = self.clock.now_utc();
         self.repository
-            .update_status(principal.user_id(), order_id, status, &updated_at)
+            .update(
+                principal.user_id(),
+                order_id,
+                UpdateOrder {
+                    status: Some(status),
+                    ..UpdateOrder::default()
+                },
+                &updated_at,
+            )
             .await?
             .ok_or(ApplicationError::NotFound)
     }
@@ -352,7 +388,15 @@ impl OrderApplication {
         principal.require(Capability::UpdateNote)?;
         let updated_at = self.clock.now_utc();
         self.repository
-            .update_note(principal.user_id(), order_id, &note, &updated_at)
+            .update(
+                principal.user_id(),
+                order_id,
+                UpdateOrder {
+                    note: Some(note),
+                    ..UpdateOrder::default()
+                },
+                &updated_at,
+            )
             .await?
             .ok_or(ApplicationError::NotFound)
     }
@@ -363,10 +407,19 @@ impl OrderApplication {
         order_id: &str,
     ) -> Result<(), ApplicationError> {
         principal.require(Capability::SyncOrders)?;
+        let now = self.clock.now_utc();
         self.repository
-            .delete(principal.user_id(), order_id)
+            .update(
+                principal.user_id(),
+                order_id,
+                UpdateOrder {
+                    deleted_at: Some(now.clone()),
+                    ..UpdateOrder::default()
+                },
+                &now,
+            )
             .await?
-            .then_some(())
+            .map(|_| ())
             .ok_or(ApplicationError::NotFound)
     }
 
@@ -382,8 +435,10 @@ impl OrderApplication {
                 "No fields to update".to_string(),
             ));
         }
+        timestamps::parse(update.updated_at.as_deref())?;
+        timestamps::parse(update.deleted_at.as_deref())?;
         self.repository
-            .update(principal.user_id(), order_id, update)
+            .update(principal.user_id(), order_id, update, &self.clock.now_utc())
             .await?
             .ok_or(ApplicationError::NotFound)
     }
@@ -407,6 +462,7 @@ impl OrderApplication {
             let repository = Arc::clone(&repository);
             async move {
                 let order = input.into_order(&user_id);
+                timestamps::validate_order(&order)?;
                 repository.upsert_if_newer(&user_id, order).await
             }
         }))
@@ -424,7 +480,7 @@ impl OrderApplication {
     ) -> Result<usize, ApplicationError> {
         principal.require(Capability::SyncOrders)?;
         self.repository
-            .delete_many(principal.user_id(), &order_ids)
+            .delete_many(principal.user_id(), &order_ids, &self.clock.now_utc())
             .await
     }
 }

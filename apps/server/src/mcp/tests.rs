@@ -37,7 +37,7 @@ fn server(orders: impl IntoIterator<Item = Order>) -> OrderMcpServer {
 
 fn authenticated_parts(user_id: &str) -> Parts {
     let request = Request::new(());
-    let (mut parts, _) = request.into_parts();
+    let (mut parts, ()) = request.into_parts();
     parts
         .extensions
         .insert(Principal::agent(UserId::new(user_id)));
@@ -48,7 +48,7 @@ fn protocol_meta() -> Value {
     json!({
         "io.modelcontextprotocol/protocolVersion": "2026-07-28",
         "io.modelcontextprotocol/clientInfo": {
-            "name": "order-wizard-test",
+            "name": "ordercue-test",
             "version": "1.0.0"
         },
         "io.modelcontextprotocol/clientCapabilities": {}
@@ -165,7 +165,7 @@ async fn status_and_note_updates_use_the_same_application_boundary() {
 #[tokio::test]
 async fn missing_principal_is_a_tool_error_not_an_authority_escalation() {
     let server = server([order("alice-order", "alice", "Product")]);
-    let (parts, _) = Request::new(()).into_parts();
+    let (parts, ()) = Request::new(()).into_parts();
 
     let result = server
         .get_order(
@@ -175,9 +175,8 @@ async fn missing_principal_is_a_tool_error_not_an_authority_escalation() {
             }),
         )
         .await;
-    let error = match result {
-        Ok(_) => panic!("missing principal must fail"),
-        Err(error) => error,
+    let Err(error) = result else {
+        panic!("missing principal must fail")
     };
 
     assert_eq!(error.is_error, Some(true));
@@ -187,7 +186,7 @@ async fn missing_principal_is_a_tool_error_not_an_authority_escalation() {
 
 #[test]
 fn production_transport_is_modern_stateless_and_validates_host_and_origin() {
-    let config = transport_config("https://api.order-wizard.example").unwrap();
+    let config = transport_config("https://api.ordercue.example").unwrap();
 
     assert!(!config.legacy_session_mode);
     assert!(config.json_response);
@@ -195,11 +194,11 @@ fn production_transport_is_modern_stateless_and_validates_host_and_origin() {
     assert!(config
         .allowed_hosts
         .iter()
-        .any(|host| host == "api.order-wizard.example"));
+        .any(|host| host == "api.ordercue.example"));
     assert!(config
         .allowed_origins
         .iter()
-        .any(|origin| origin == "https://api.order-wizard.example"));
+        .any(|origin| origin == "https://api.ordercue.example"));
 }
 
 #[tokio::test]
@@ -372,7 +371,7 @@ async fn streamable_http_rejects_protocol_header_body_mismatch() {
                             "_meta": {
                                 "io.modelcontextprotocol/protocolVersion": "2025-11-25",
                                 "io.modelcontextprotocol/clientInfo": {
-                                    "name": "order-wizard-test",
+                                    "name": "ordercue-test",
                                     "version": "1.0.0"
                                 },
                                 "io.modelcontextprotocol/clientCapabilities": {}
@@ -395,8 +394,8 @@ async fn streamable_http_rejects_protocol_header_body_mismatch() {
 #[tokio::test]
 async fn mcp_endpoint_requires_oauth_and_advertises_resource_metadata() {
     let application = OrderApplication::new(InMemoryOrderRepository::with_orders([]));
-    let config = transport_config("https://api.order-wizard.example").unwrap();
-    let policy = AuthPolicy::new("extension-client", "https://api.order-wizard.example");
+    let config = transport_config("https://api.ordercue.example").unwrap();
+    let policy = AuthPolicy::new("extension-client", "https://api.ordercue.example");
     let verifier = JwksVerifier::new("https://issuer.example".to_string(), policy);
     let app = Router::new()
         .nest_service("/mcp", service(application, config))
@@ -405,7 +404,7 @@ async fn mcp_endpoint_requires_oauth_and_advertises_resource_metadata() {
     let response = app
         .oneshot(
             Request::post("/mcp")
-                .header("host", "api.order-wizard.example")
+                .header("host", "api.ordercue.example")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -419,7 +418,7 @@ async fn mcp_endpoint_requires_oauth_and_advertises_resource_metadata() {
         .and_then(|value| value.to_str().ok())
         .unwrap();
     assert!(challenge.contains(
-        "resource_metadata=\"https://api.order-wizard.example/.well-known/oauth-protected-resource\""
+        "resource_metadata=\"https://api.ordercue.example/.well-known/oauth-protected-resource\""
     ));
     assert!(challenge.contains("orders.read"));
     assert!(challenge.contains("orders.status.write"));

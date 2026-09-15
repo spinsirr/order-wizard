@@ -1,0 +1,81 @@
+@import "../sidepanel/index.css";
+
+body[data-demo-page="true"] {
+  min-width: 320px;
+  overflow: auto;
+  background:
+    radial-gradient(
+      circle at 50% 12%,
+      color-mix(in srgb, var(--color-link) 10%, transparent),
+      transparent 26rem
+    ),
+    var(--color-background);
+}
+
+.demo-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 1.5rem;
+}
+
+.demo-frame {
+  position: relative;
+  width: min(25rem, 100%);
+  height: min(52rem, calc(100vh - 3rem));
+  min-height: min(38rem, calc(100vh - 3rem));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-background);
+  box-shadow:
+    0 2.5rem 6rem color-mix(in srgb, var(--color-foreground) 18%, transparent),
+    0 0 0 0.35rem color-mix(in srgb, var(--color-card) 72%, transparent);
+}
+
+.demo-shell-with-navigation {
+  min-height: calc(100vh - 57px);
+}
+
+.demo-shell-with-navigation .demo-frame {
+  height: min(52rem, calc(100vh - 7rem));
+  min-height: min(38rem, calc(100vh - 7rem));
+}
+
+@media (max-width: 26rem) {
+  body[data-demo-page="true"] {
+    overflow: hidden;
+  }
+
+  .demo-shell {
+    display: block;
+    padding: 0;
+  }
+
+  .demo-frame {
+    width: 100%;
+    height: 100vh;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .demo-shell-with-navigation .demo-frame {
+    height: calc(100vh - 57px);
+    min-height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-frame {
+    animation: demo-frame-in 520ms 60ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes demo-frame-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.7rem) scale(0.985);
+  }
+}

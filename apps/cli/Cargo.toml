@@ -1,12 +1,13 @@
 [package]
-name = "order-wizard-cli"
+name = "ordercue-cli"
 version.workspace = true
 edition.workspace = true
-description = "Agent-friendly CLI for Order Wizard"
+rust-version.workspace = true
+description = "Agent-friendly CLI for OrderCue"
 license.workspace = true
 
 [[bin]]
-name = "order-wizard"
+name = "ordercue"
 path = "src/main.rs"
 
 [dependencies]
@@ -24,3 +25,6 @@ schemars = "1.2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

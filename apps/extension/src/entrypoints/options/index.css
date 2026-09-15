@@ -1,0 +1,9 @@
+@import "../sidepanel/index.css";
+
+body {
+  overflow: auto;
+}
+#root {
+  height: auto;
+  min-height: 100dvh;
+}

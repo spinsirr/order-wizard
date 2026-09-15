@@ -11,7 +11,7 @@ pub enum OrderStatus {
     Reimbursed,
 }
 
-/// Internal database entity - stored with snake_case field names in MongoDB
+/// Internal database entity - stored with `snake_case` field names in `MongoDB`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderEntity {
     pub id: String,
@@ -35,6 +35,10 @@ pub struct OrderEntity {
 /// API response type - serialized with camelCase for frontend
 #[derive(Debug, Clone, Serialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Public orderNumber and orderDate JSON names are established API fields"
+)]
 pub struct Order {
     pub id: String,
     pub user_id: String,

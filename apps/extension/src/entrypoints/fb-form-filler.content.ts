@@ -1,35 +1,30 @@
-import { initializeErrorHandlers } from '@/lib';
-import { fillFBForm } from '@/content/fbFormFiller/formFiller';
-import type { FBListingData } from '@/types';
 import { FB_PENDING_LISTING_KEY } from '@/constants';
+import { type FillField, fillFBForm } from '@/content/fbFormFiller/formFiller';
+import { showFillResultDialog } from '@/content/fbMarketplace/previewModal';
+import { initializeErrorHandlers } from '@/lib';
+import { changeListingDraft } from '@/lib/listingDraft';
+import { FBListingDataSchema } from '@/schemas/fbListing';
 
 export default defineContentScript({
   matches: ['*://*.facebook.com/marketplace/create/*'],
-  async main() {
+  async main(ctx) {
     initializeErrorHandlers();
-
-    console.log('[FB FormFiller] Content script loaded on FB Marketplace');
-
-    // Read listing from storage and fill the form
-    const result = await chrome.storage.local.get(FB_PENDING_LISTING_KEY);
-    const listing = result[FB_PENDING_LISTING_KEY] as FBListingData | undefined;
-
-    if (!listing) {
-      console.log('[FB FormFiller] No pending listing found in storage');
+    const stored = await chrome.storage.local.get(FB_PENDING_LISTING_KEY);
+    if (!stored[FB_PENDING_LISTING_KEY]) {
       return;
     }
-
-    console.log('[FB FormFiller] Found pending listing:', listing.title);
-
-    // Clear the pending listing from storage
-    await chrome.storage.local.remove(FB_PENDING_LISTING_KEY);
-
-    // Fill the form
-    try {
-      await fillFBForm(listing);
-      console.log('[FB FormFiller] Form filled successfully');
-    } catch (error) {
-      console.error('[FB FormFiller] Failed to fill form:', error);
-    }
+    const listing = FBListingDataSchema.parse(stored[FB_PENDING_LISTING_KEY]);
+    const attempt = async (fields?: FillField[]) => {
+      const results = await fillFBForm(listing, fields);
+      showFillResultDialog(ctx, results, (action) => {
+        if (action === 'retry') {
+          void attempt(results.filter((result) => result.error).map((result) => result.field));
+        }
+        if (action === 'done') {
+          void changeListingDraft({ kind: 'clear', listing });
+        }
+      });
+    };
+    await attempt();
   },
 });

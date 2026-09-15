@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-fn exchange(input: &mut impl Write, output: &mut impl BufRead, message: Value) -> Value {
+fn exchange(input: &mut impl Write, output: &mut impl BufRead, message: &Value) -> Value {
     writeln!(input, "{message}").unwrap();
     input.flush().unwrap();
     let mut line = String::new();
@@ -17,10 +17,10 @@ fn exchange(input: &mut impl Write, output: &mut impl BufRead, message: Value) -
 #[test]
 fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
     let (api_url, server) = serve_once(r#"[{"id":"order-1"}]"#);
-    let mut child = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .arg("mcp")
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "mcp-test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "mcp-test-token")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -31,7 +31,7 @@ fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
     let initialized = exchange(
         &mut input,
         &mut output,
-        serde_json::json!({
+        &serde_json::json!({
             "jsonrpc":"2.0", "id":1, "method":"initialize", "params":{
                 "protocolVersion":"2025-11-25", "capabilities":{},
                 "clientInfo":{"name":"integration-test", "version":"1"}
@@ -48,13 +48,13 @@ fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
     let listed = exchange(
         &mut input,
         &mut output,
-        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+        &serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
     );
     assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 5);
     let called = exchange(
         &mut input,
         &mut output,
-        serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+        &serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
             "name":"orders_list", "arguments":{"limit":1}
         }}),
     );
@@ -120,10 +120,10 @@ fn list_outputs_json_and_calls_only_the_agent_endpoint() {
     let response = r#"[{"id":"order-1","orderNumber":"111-1111111-1111111"}]"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "list"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -146,10 +146,10 @@ fn get_outputs_one_order_from_the_agent_endpoint() {
     let response = r#"{"id":"order-1","status":"uncommented"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "get", "order-1"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -167,7 +167,7 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
     let response = r#"[{"id":"order-1"}]"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args([
             "orders",
             "search",
@@ -177,8 +177,8 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
             "--limit",
             "10",
         ])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -194,10 +194,10 @@ fn status_updates_only_the_status_agent_endpoint() {
     let response = r#"{"id":"order-1","status":"reimbursed"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "status", "order-1", "reimbursed"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -212,10 +212,10 @@ fn note_updates_only_the_note_agent_endpoint() {
     let response = r#"{"id":"order-1","note":"Follow up tomorrow"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "note", "order-1", "Follow up tomorrow"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -228,7 +228,7 @@ fn note_updates_only_the_note_agent_endpoint() {
 #[test]
 fn destructive_order_commands_are_not_exposed() {
     for command in ["create", "delete", "batch"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+        let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
             .args(["orders", command])
             .output()
             .unwrap();
@@ -242,10 +242,10 @@ fn destructive_order_commands_are_not_exposed() {
 
 #[test]
 fn missing_token_is_a_machine_readable_auth_error() {
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "list"])
-        .env("ORDER_WIZARD_API_URL", "https://api.orderwizard.example")
-        .env_remove("ORDER_WIZARD_ACCESS_TOKEN")
+        .env("ORDERCUE_API_URL", "https://api.ordercue.example")
+        .env_remove("ORDERCUE_ACCESS_TOKEN")
         .output()
         .unwrap();
 

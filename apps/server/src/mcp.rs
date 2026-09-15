@@ -49,13 +49,13 @@ struct SearchOrdersParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct GetOrderParams {
-    /// Canonical Order Wizard order ID.
+    /// Canonical `OrderCue` order ID.
     id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct SetStatusParams {
-    /// Canonical Order Wizard order ID.
+    /// Canonical `OrderCue` order ID.
     id: String,
     /// New workflow status.
     status: OrderStatus,
@@ -63,7 +63,7 @@ struct SetStatusParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct SetNoteParams {
-    /// Canonical Order Wizard order ID.
+    /// Canonical `OrderCue` order ID.
     id: String,
     /// Complete replacement note. Pass an empty string to clear it.
     note: String,
@@ -148,7 +148,7 @@ impl OrderMcpServer {
 
     #[tool(
         name = "orders_get",
-        description = "Get one order by its canonical Order Wizard ID.",
+        description = "Get one order by its canonical OrderCue ID.",
         annotations(
             title = "Get order",
             read_only_hint = true,
@@ -223,7 +223,7 @@ impl OrderMcpServer {
 }
 
 #[tool_handler(
-    name = "order-wizard",
+    name = "ordercue",
     instructions = "Read orders and update only their status or note. Creating and deleting orders are intentionally unavailable."
 )]
 impl ServerHandler for OrderMcpServer {
@@ -256,7 +256,7 @@ pub(crate) fn service(
     application: OrderApplication,
     config: StreamableHttpServerConfig,
 ) -> StreamableHttpService<OrderMcpServer, NeverSessionManager> {
-    let factory_application = application.clone();
+    let factory_application = application;
     StreamableHttpService::new(
         move || Ok(OrderMcpServer::new(factory_application.clone())),
         Arc::new(NeverSessionManager::default()),
@@ -274,10 +274,10 @@ pub(crate) fn transport_config(resource_uri: &str) -> Result<StreamableHttpServe
     let resource_host = resource
         .host_str()
         .ok_or_else(|| "RESOURCE_URI must contain a host".to_string())?;
-    let resource_authority = resource
-        .port()
-        .map(|port| format!("{resource_host}:{port}"))
-        .unwrap_or_else(|| resource_host.to_string());
+    let resource_authority = resource.port().map_or_else(
+        || resource_host.to_string(),
+        |port| format!("{resource_host}:{port}"),
+    );
 
     let mut allowed_hosts = vec![
         resource_authority,
@@ -328,6 +328,10 @@ fn application_error(error: ApplicationError) -> CallToolResult {
             "The access token lacks the required scope",
         ),
         ApplicationError::InvalidInput(message) => tool_error("INVALID_INPUT", &message),
+        ApplicationError::Conflict => tool_error(
+            "CONFLICT",
+            "Order changed; fetch the latest version before editing",
+        ),
         ApplicationError::NotFound => tool_error("NOT_FOUND", "Order not found"),
         ApplicationError::Repository(message) => {
             tracing::error!(error = %message, "MCP order operation failed");
