@@ -7,10 +7,7 @@
     "apps/*"
   ],
   "overrides": {
-    "publish-browser-extension": "4.0.5"
-  },
-  "patchedDependencies": {
-    "publish-browser-extension@4.0.5": "patches/publish-browser-extension@4.0.5.patch"
+    "publish-browser-extension": "6.1.1"
   },
   "devDependencies": {
     "@types/bun": "1.3.6",

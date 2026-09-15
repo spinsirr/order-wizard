@@ -182,11 +182,12 @@ Pre-commit validates staged versions and runs checks without rewriting or stagin
 Release tags must match versions and point to main; never move existing tags.
 See README and `.github/workflows/release.yml` for credential and release setup.
 
-The Chrome draft uploader uses WXT's pinned publisher. Its Bun patch requires an
-explicit SUCCESS result; pending/unknown results fail the job. The business test
-loads the actual WXT dependency and mocks HTTP; it does not upload to Google.
-Upload does not submit review or publish the extension. API v1 credential migration
-must be finished before Google's announced 2026-10-15 retirement.
+Chrome releases use WXT's pinned API v2 publisher and a dedicated service account to
+upload and submit for review, with automatic publishing after Google's approval.
+The upstream publisher requires upload SUCCEEDED and propagates submission failures;
+no local patch or personal OAuth refresh token is used. Never automatically cancel an
+existing review. The business test loads the actual WXT dependency and mocks HTTP;
+it does not upload to Google. See README for GitHub Secrets and credential dry runs.
 
 Use conventional commits (`feat`, `fix`, `refactor`, `docs`, `chore`, `test`). Do not
 add generated-by or AI co-author attribution to commits, issues or PRs.

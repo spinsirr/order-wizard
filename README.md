@@ -290,27 +290,20 @@ The tag must match the root package version and point to a commit on `main`. The
 
 Configure `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, and `VITE_API_BASE_URL` as repository secrets. `FLY_API_TOKEN` must be available to the `production` GitHub environment; deployment protection rules can be added to that environment when approval is required.
 
-After the GitHub Release succeeds, the `Upload Chrome Web Store draft` job uploads the same extension ZIP to the existing Chrome Web Store listing using [WXT's publishing command](https://wxt.dev/guide/essentials/publishing.html). It runs only for release tags and passes `--chrome-skip-submit-review`: open the developer dashboard to review the draft and submit it for review. Uploading the ZIP does not publish an update to users.
+After the GitHub Release succeeds, the `Submit Chrome Web Store release` job uploads the same extension ZIP and submits it for review using [WXT's publishing command](https://wxt.dev/guide/essentials/publishing.html). It runs only for release tags. Google publishes the update automatically after approval; a successful job means the submission was accepted, not that review has finished.
 
-Configure these repository secrets for the upload job:
+Configure these repository secrets for the API v2 submission job:
 
 | Secret | Value |
 |--------|-------|
 | `CHROME_EXTENSION_ID` | The existing Chrome Web Store item's ID |
-| `CHROME_CLIENT_ID` | Google OAuth client ID for the Chrome Web Store API |
-| `CHROME_CLIENT_SECRET` | The matching Google OAuth client secret |
-| `CHROME_REFRESH_TOKEN` | Refresh token authorized by an account that can update the item |
+| `CHROME_PUBLISHER_ID` | Publisher ID from the Chrome Web Store dashboard |
+| `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` | Service account linked to that publisher |
+| `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY` | PEM private key from the service account's JSON key |
 
-These are Google credentials, separate from the application's Cognito clients. Follow [Chrome's API setup guide](https://developer.chrome.com/docs/webstore/using-api) or run `bunx --no-install wxt submit init` from `apps/extension` when credentials need to be created or renewed; keep `.env.submit` out of Git. Each new store update needs a higher extension version, including when an earlier version was uploaded manually. If the upload job fails, correct the reported issue and rerun that failed job; the completed server deployment and GitHub Release do not need to run again.
+Follow [Chrome's service account setup](https://developer.chrome.com/docs/webstore/service-accounts): enable the Chrome Web Store API, create a dedicated service account without Google Cloud project roles, and link its email under the publisher's Account settings. Store the key in GitHub Secrets; keep key files and `.env.submit` out of Git. The job uses WXT's pinned API v2 publisher, so personal OAuth refresh tokens and local dependency patches are unnecessary.
 
-The pinned publisher is patched through Bun to require explicit `SUCCESS`; HTTP 200
-with `IN_PROGRESS`, an unknown state, or a missing state fails the job. If processing
-is still pending, inspect the draft in the store dashboard before retrying. The patch
-and business regression must be retained until an upstream upgrade provides this
-contract. The current WXT path uses API v1; [Google schedules its retirement for
-2026-10-15](https://developer.chrome.com/docs/webstore/api/v1). Migration to API v2
-also requires the publisher ID and the new publisher's service-account credentials;
-that account configuration is separate from this local code fix.
+The publisher requires upload state `SUCCEEDED` before submitting and propagates API failures. It never cancels an existing review automatically. Each store update needs a higher version. If submission fails, inspect the dashboard before retrying the failed job; do not rerun an upload while that version is already under review. The completed server deployment and GitHub Release do not need to run again. Validate credentials without uploading with `bunx --no-install wxt submit --dry-run --chrome-api-version v2 --chrome-zip <release.zip>` from `apps/extension`, with the same secrets in the environment.
 
 ## API Documentation
 
