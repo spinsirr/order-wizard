@@ -63,7 +63,7 @@ if (check) {
     resolve(repositoryRoot, 'Cargo.toml'),
     cargoText.replace(pattern, `$1${version}$2`),
   );
-  const metadata = Bun.spawnSync(['cargo', 'metadata', '--format-version', '1', '--no-deps'], {
+  const metadata = Bun.spawnSync(['cargo', 'metadata', '--format-version', '1'], {
     cwd: repositoryRoot,
     stdout: 'ignore',
     stderr: 'inherit',
