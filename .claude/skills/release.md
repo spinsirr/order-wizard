@@ -13,6 +13,6 @@ The repository's `/ship` skill is disabled; follow AGENTS.md. Never start an ind
 4. When a release is authorized, create and push a new matching `vX.Y.Z` tag on main. Existing release tags are immutable; never delete or move one to retry a release.
 5. `.github/workflows/release.yml` validates the tag, runs CI, builds the extension and CLI artifacts, deploys the tagged server, and creates the GitHub Release.
 
-Chrome Web Store upload uses the release ZIP and the established WXT publisher. The `CHROME_EXTENSION_ID`, `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` repository secrets must be configured. Upload runs after the tag-driven GitHub Release and skips submission for review. The job requires an explicit SUCCESS upload state; pending, unknown and rejected uploads fail. A successful upload does not mean that the store has reviewed or published it.
+Chrome Web Store submission uses the release ZIP and the established WXT publisher. The `CHROME_EXTENSION_ID`, `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` repository secrets must be configured. After the tag-driven GitHub Release, WXT uploads and submits for review; Google publishes automatically after approval. The job requires explicit upload SUCCESS and accepted submission statuses; pending uploads, unknown states and rejected requests fail. A successful job means submitted for review, not approved or published.
 
 Use a new version for new code. For a transient CI failure, rerun the existing job against the same tagged commit.

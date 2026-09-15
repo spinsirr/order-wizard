@@ -182,10 +182,11 @@ Pre-commit validates staged versions and runs checks without rewriting or stagin
 Release tags must match versions and point to main; never move existing tags.
 See README and `.github/workflows/release.yml` for credential and release setup.
 
-The Chrome draft uploader uses WXT's pinned publisher. Its Bun patch requires an
-explicit SUCCESS result; pending/unknown results fail the job. The business test
-loads the actual WXT dependency and mocks HTTP; it does not upload to Google.
-Upload does not submit review or publish the extension. API v1 credential migration
+Chrome releases use WXT's pinned publisher to upload and submit for review, with
+automatic publishing after Google's approval. Its Bun patch requires explicit upload
+SUCCESS and accepted submission statuses; unknown or rejected results fail the job.
+The business test loads the actual WXT dependency and mocks HTTP; it does not upload
+to Google. API v1 credential migration
 must be finished before Google's announced 2026-10-15 retirement.
 
 Use conventional commits (`feat`, `fix`, `refactor`, `docs`, `chore`, `test`). Do not

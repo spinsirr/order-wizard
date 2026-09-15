@@ -290,7 +290,7 @@ The tag must match the root package version and point to a commit on `main`. The
 
 Configure `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, and `VITE_API_BASE_URL` as repository secrets. `FLY_API_TOKEN` must be available to the `production` GitHub environment; deployment protection rules can be added to that environment when approval is required.
 
-After the GitHub Release succeeds, the `Upload Chrome Web Store draft` job uploads the same extension ZIP to the existing Chrome Web Store listing using [WXT's publishing command](https://wxt.dev/guide/essentials/publishing.html). It runs only for release tags and passes `--chrome-skip-submit-review`: open the developer dashboard to review the draft and submit it for review. Uploading the ZIP does not publish an update to users.
+After the GitHub Release succeeds, the `Submit Chrome Web Store release` job uploads the same extension ZIP and submits it for review using [WXT's publishing command](https://wxt.dev/guide/essentials/publishing.html). It runs only for release tags. Google publishes the update automatically after approval; a successful job means the submission was accepted, not that review has finished.
 
 Configure these repository secrets for the upload job:
 
@@ -307,7 +307,9 @@ The pinned publisher is patched through Bun to require explicit `SUCCESS`; HTTP 
 with `IN_PROGRESS`, an unknown state, or a missing state fails the job. If processing
 is still pending, inspect the draft in the store dashboard before retrying. The patch
 and business regression must be retained until an upstream upgrade provides this
-contract. The current WXT path uses API v1; [Google schedules its retirement for
+contract. Submission requires a nonempty `status` array containing only `OK` or
+`ITEM_PENDING_REVIEW`; missing, unknown or rejected statuses fail the job, with
+Google's `statusDetail` included in the error. The current WXT path uses API v1; [Google schedules its retirement for
 2026-10-15](https://developer.chrome.com/docs/webstore/api/v1). Migration to API v2
 also requires the publisher ID and the new publisher's service-account credentials;
 that account configuration is separate from this local code fix.

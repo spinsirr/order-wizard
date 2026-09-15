@@ -215,7 +215,7 @@ jobs:
           files: dist/*
 
   chrome-web-store:
-    name: Upload Chrome Web Store draft
+    name: Submit Chrome Web Store release
     needs: [version, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -243,7 +243,7 @@ jobs:
           name: extension
           path: apps/extension
 
-      - name: Upload draft without submitting for review
+      - name: Upload and submit for review
         working-directory: apps/extension
         env:
           CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
@@ -256,5 +256,4 @@ jobs:
           : "${CHROME_CLIENT_SECRET:?Missing CHROME_CLIENT_SECRET repository secret}"
           : "${CHROME_REFRESH_TOKEN:?Missing CHROME_REFRESH_TOKEN repository secret}"
           bunx --no-install wxt submit \
-            --chrome-zip "amazon-order-wizard-v${{ needs.version.outputs.version }}.zip" \
-            --chrome-skip-submit-review
+            --chrome-zip "amazon-order-wizard-v${{ needs.version.outputs.version }}.zip"
