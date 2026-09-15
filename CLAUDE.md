@@ -2,9 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Follow [AGENTS.md](AGENTS.md) for project workflow rules, including the disabled `/ship` skill.
+
 ## Project Overview
 
-Amazon Order Wizard - A browser extension for tracking Amazon orders with cloud sync support.
+OrderCue - A browser extension for tracking Amazon orders with cloud sync support.
 
 ## Commands
 
@@ -22,6 +24,7 @@ just build        # Build extension + Rust server and CLI
 just check        # Run TypeScript and Rust checks/tests
 just ci           # Alias for check
 just typecheck    # TypeScript check
+just test         # Vitest + Rust tests
 just lint         # Biome lint
 just lint-fix     # Biome lint with auto-fix
 just format       # Biome format
@@ -39,11 +42,57 @@ just bump X.Y.Z   # Synchronize release versions and refresh Cargo.lock
 
 ## Architecture
 
+### Frontend component debugging
+
+Run `bun run storybook` from `apps/extension` and open `http://127.0.0.1:6006`.
+Storybook renders the actual cards and order list with isolated mock data, plus a workflow designer prototype.
+Use the story sidebar to switch scenarios, Controls to change inputs, Actions to inspect events,
+and the viewport toolbar for 320/400/480px side panels. List changes live in memory and reset
+when changing stories or reloading the canvas; they never use extension storage or cloud sync.
+
+Stories live in `apps/extension/src/stories`. The Storybook-only Vite alias replaces
+`@/hooks/useOrders` with `src/stories/mockOrders.tsx`; production imports stay unchanged.
+Run `bun run typecheck:storybook` and `bun run build-storybook` to check this workbench.
+
+Automated frontend tests cover business behavior: order sync, account isolation,
+login/refresh, deletion propagation, return reminder calculations and export safety.
+Keep protocol validation and Marketplace data/retry tests. Do not add tests for
+component rendering, copy, styles, labels or display states; inspect those manually
+in Storybook. Testing Library may drive a business hook/provider without asserting
+its rendered UI.
+
+Tests use Vitest, Testing Library and jsdom. Run `bun run test` or
+`bun run test:watch` inside `apps/extension`. Node.js 24.5+ is required: the test
+environment uses native Web Locks from `node:worker_threads` and the existing
+`@webext-core/fake-browser` package for extension APIs. Tests inherit the strict
+TypeScript rules through `tsconfig.test.json` and are included in `just check`
+and CI. In Storybook, inspect Orders/Card (including note Controls while editing),
+Orders/List (search and return queue states), and Marketplace/Preview (editing,
+photo selection, no photos and Escape). Storybook remains the interactive UI workbench.
+
+`Workflow/Settings` contains an editable state-machine example and a blank starting point.
+The Storybook-only prototype lives in `src/demo/state-machine-prototype`: React Flow edits
+states, the initial state, multiple final states, and named directed transitions; XState
+runs exactly those transitions in a mock order. Create connections by dragging from a state’s
+bottom handle to another state’s top handle; drag selected edge endpoints to reconnect.
+Connection endpoints have no form selectors. Final states have no outgoing actions.
+Names do not imply reimbursement or other side effects. Invalid drafts remain editable,
+and unreachable states or non-final dead ends are flagged. This is an in-memory design
+experiment, not the production order schema.
+
+The full frontend runs with `bun run dev:workflow` at
+`http://127.0.0.1:3001/src/entrypoints/demo/index.html`; its navigation links to Storybook.
+`bun run build:demo` builds the Vercel preview; extension builds exclude the demo and its mocks.
+`Marketplace/Preview` renders the actual listing dialog with mock data. In the extension,
+WXT mounts `listing-preview.html` in an isolated iframe; a private MessageChannel carries
+the draft and confirmed result. Business React imports `components/ui`; Radix stays inside
+that shared layer. Status display names come from `ORDER_STATUS_LABELS`.
+
 ### Monorepo Structure
 - **apps/extension/** - React 19 browser extension (Vite + TailwindCSS 4)
 - **apps/server/** - Rust API (Axum 0.8 + MongoDB)
 - **apps/cli/** - Installable Rust CLI with a stable JSON contract
-- **skills/order-wizard/** - Agent instructions paired with the CLI
+- **skills/ordercue/** - Agent instructions paired with the CLI
 - Package manager: Bun (workspaces in `apps/*`)
 - Releases are created only from matching `vX.Y.Z` tags on `main`; that workflow builds all user artifacts and deploys the server from the tagged commit.
 
@@ -54,358 +103,100 @@ just bump X.Y.Z   # Synchronize release versions and refresh Cargo.lock
 4. Server validates RS256, issuer, expiry, `token_use=access`, resource audience, and client allowlist
 5. Final token scopes are intersected with the app client's maximum capabilities to construct `Principal`
 
-### Extension Structure (apps/extension/src/)
-```
-src/
-├── App.tsx              # Main app with ErrorBoundary
-├── main.tsx             # Entry point
-├── lib/                 # Utilities (cn.ts, errors.ts, syncQueue.ts)
-├── utils/               # Order filtering (orderFilters.ts), export (orderExport.ts)
-├── config/              # OAuth config, repository instances, env
-├── repositories/        # ApiRepository, LocalStorageRepository
-├── hooks/               # useOrders (CRUD + save)
-├── contexts/            # AuthContext, SyncContext
-├── components/          # React components
-│   └── ui/              # Reusable UI primitives (button, card, badge)
-├── constants/           # Shared constants (ORDERS_KEY, LOCAL_USER_ID)
-├── types/               # TypeScript types (Order, User, AuthUser, OrderStatus)
-├── schemas/             # Zod validation schemas
-├── content/             # Content scripts for Amazon pages
-│   ├── content.ts       # Main entry
-│   ├── injector.ts      # Inject save buttons
-│   ├── scraper.ts       # Scrape order data
-│   ├── orderProcessor.ts
-│   └── userResolver.ts
-└── background/          # Background script
-```
+### Canonical boundaries
 
-### Server Structure (apps/server/src/)
-```
-src/
-├── main.rs              # Minimal binary entrypoint
-├── lib.rs               # Composition root and Axum setup
-├── application/         # OrderApplication and tenant-scoped repository port
-├── auth/                # Cognito verification and scope-to-Principal mapping
-├── db.rs                # MongoDB connection
-├── models.rs            # Shared transport/persistence models
-└── routes/
-    ├── orders.rs        # Extension sync/CRUD REST surface
-    └── agent_orders.rs  # Restricted list/search/detail/status/note REST surface
-```
+- `apps/extension/src/entrypoints` contains WXT background, content, sidepanel,
+  options, listing-preview and demo entrypoints. Configure the manifest in
+  `wxt.config.ts`; do not edit generated manifests.
+- `schemas/order.ts` is the Order contract. API adapters derive their wire schemas
+  from it; normalize transport nulls at the boundary. IDs are opaque strings;
+  extension-created IDs use UUIDs. Missing product images are represented by `''`.
+- `background/orderStorage.ts` owns local order/outbox writes. All normal callers
+  use `LocalStorageRepository` or the typed broker commands. The Web Lock and one
+  `chrome.storage.local.set` commit protect the entire transaction.
+- `authStorage.ts` owns cross-panel credential commits under Web Locks and expected
+  revisions/tokens; `authFlow.ts` uses oauth4webapi for authorization and refresh.
+  AuthProvider consumes committed storage snapshots. HTTP clients bind a token to
+  each sync operation; never mutate a global bearer token.
+- `useOrders.ts` reads the account's local replica and submits mutations. Await the
+  broker, then invalidate TanStack Query. Do not duplicate persistence with whole
+  array optimistic rollback. Present query and mutation errors to the user.
+- `lib/syncQueue.ts` is a durable outbox. TanStack Query owns network retries and
+  online/offline scheduling. Batch recovery uses one `enqueue(orders)` command.
+  ACK only the operation IDs sent; failed and newer writes stay pending.
+- `apps/server/src/application` owns tenant/capability enforcement for REST, MCP
+  and CLI requests. Its repository port has MongoDB and in-memory implementations.
+  Use atomic field patches for commands, and full snapshots only for replication.
+- `apps/server/src/lib.rs` composes Axum, auth, CORS and rate limiting; `main.rs`
+  starts the server. `routes` owns REST/OAuth discovery and `mcp` owns MCP transport.
 
-### Data Sync
-- Offline-first: orders stored locally, synced to cloud when authenticated
-- Conflict resolution: `updatedAt` timestamp comparison (last write wins)
-- Soft delete: local orders marked with `deletedAt` for sync tracking
-- Sync queue with exponential backoff retry (max 3 retries)
+### Replication contract
 
-### Order Status Flow
-```
-Uncommented -> Commented -> CommentRevealed -> Reimbursed
-```
+Orders are offline first in `chrome.storage.local`; MongoDB is the shared replica.
+Identity is `(userId, orderNumber)`, with a canonical persisted ID. Account switches
+must never reassign owned records. Anonymous records can join the first signed-in
+account; collisions remain anonymous.
 
-## Design Philosophy
+Compare `updatedAt`, falling back to `createdAt`, as RFC3339 instants with nanosecond
+precision. Rust uses `time`; TypeScript uses `@js-temporal/polyfill`. Server commands
+and local edits advance `max(clock, previous + 1ns)`. An explicit stale PATCH version
+returns HTTP 409. Reapply only requested fields when a CAS must retry. Cloud wins
+an equal-version pull; older snapshots cannot overwrite local data.
 
-**Fail Fast** - Let errors propagate and fail visibly:
-- No try-catch blocks for error suppression
-- React Query handles error states for async operations
-- ErrorBoundary catches React render errors at top level
-- Rust uses `?` operator with `AppError` type, panics for unrecoverable states
+Deletion persists a tombstone with a monotonically advanced version. Ordinary
+edits do not change deleted orders. Re-capturing a deleted Amazon order intentionally
+restores it with a newer version and its existing identity. Retain unowned legacy
+delete queue entries without submitting them under a signed-in account.
 
-**Offline-First** - localStorage is the extension's immediate working copy:
-- Extension reads/writes go to localStorage immediately
-- MongoDB is the shared cloud replica used for cross-device and Agent access
-- Sync uses `updatedAt` last-write-wins; every writer must advance `updatedAt`
-- Cloud sync happens on login + manual trigger
-- Works offline, syncs when connected
+Production statuses remain `uncommented → commented → comment_revealed → reimbursed`.
+Custom state machines are a Storybook prototype, not a production schema migration.
 
-**Keep It Simple**:
-- Prefer local state (`useState`) over global state when possible
-- No state management libraries unless truly needed
-- Small, focused components over large "god" components
+## Code conventions
 
-## Git Conventions
+- Use `@/` imports inside extension source. Business React imports shared
+  `components/ui`; shadcn controls reuse Radix behavior there.
+- Prefer existing libraries and canonical helpers. Keep components and modules
+  focused; avoid speculative abstractions and duplicated contracts.
+- TypeScript 7 runs strict checks for extension, Storybook, business tests and root
+  scripts. Biome lint/format errors and warnings block CI. Do not weaken rules to
+  make a change pass. Root scripts use the root tsconfig and Bun types.
+- Rust uses `?` with application/AppError types. Clippy warnings block CI.
+- Pure UI behavior is checked manually in Storybook, not automated render/copy/style
+  tests. Business hooks/providers may use Testing Library without UI assertions.
+- Reuse PapaParse `escapeFormulae`, ExcelJS and jsPDF for safe exports. Do not build
+  custom CSV/XLSX/PDF encoders.
 
-**Commits** - Do NOT include "Generated with Claude", "Co-Authored-By: Claude", or any AI attribution in commit messages, issues, or PRs.
+## Validation and releases
 
-**Commit Message Format**:
-```
-type: short description
+`just check` runs version consistency, all TypeScript checks, Biome, design guards,
+business Vitest, Rust fmt/Clippy and Rust tests. CI additionally builds extension and
+Storybook and runs ignored Mongo regression tests against MongoDB 8.2.
 
-Optional longer description.
-```
+Use `MONGODB_TEST_URI=mongodb://127.0.0.1:27017 just test-mongo` only with a disposable
+local test instance. Tests create isolated collections and remove them afterwards.
 
-Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
+`scripts/set-version.ts` is the sole version writer. `just bump X.Y.Z` updates root
+package.json, Cargo workspace version and Cargo.lock. WXT reads the root version.
+Pre-commit validates staged versions and runs checks without rewriting or staging.
+Release tags must match versions and point to main; never move existing tags.
+See README and `.github/workflows/release.yml` for credential and release setup.
 
-## Code Conventions
+The Chrome draft uploader uses WXT's pinned publisher. Its Bun patch requires an
+explicit SUCCESS result; pending/unknown results fail the job. The business test
+loads the actual WXT dependency and mocks HTTP; it does not upload to Google.
+Upload does not submit review or publish the extension. API v1 credential migration
+must be finished before Google's announced 2026-10-15 retirement.
 
-### TypeScript/React
+Use conventional commits (`feat`, `fix`, `refactor`, `docs`, `chore`, `test`). Do not
+add generated-by or AI co-author attribution to commits, issues or PRs.
 
-**Imports** - Use path aliases:
-```typescript
-import { useAuth } from '@/contexts/AuthContext';  // Good
-import { useAuth } from '../../../contexts/AuthContext';  // Avoid
-```
+## Configuration
 
-**Components** - Keep focused and small:
-```typescript
-// Good: Single responsibility
-function OrderCard({ order, onStatusChange }: OrderCardProps) { ... }
-function OrderTableToolbar({ onSearch, onExport }: ToolbarProps) { ... }
-
-// Avoid: God components with 500+ lines
-function OrderTable() { /* everything here */ }
-```
-
-**Hooks** - Separate concerns:
-```typescript
-// useOrders.ts - Local CRUD operations
-export function useOrders() { ... }
-export function useUpdateOrderStatus() { ... }
-export function useDeleteOrders() { ... }
-export function useSaveOrder() { ... }
-```
-
-**State** - Prefer local over global:
-```typescript
-// Good: Local state in component
-const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-// Avoid: Global state for UI-only concerns
-const useStore = create((set) => ({ selectedIds: new Set(), ... }));
-```
-
-**Styling** - Use cn() for conditional classes:
-```typescript
-import { cn } from '@/lib/cn';
-
-<div className={cn(
-  "base-classes",
-  isActive && "active-classes",
-  variant === "primary" && "primary-classes"
-)} />
-```
-
-### React Query Patterns
-
-**Queries** - For reading data:
-```typescript
-const { data: orders, isLoading, error } = useQuery({
-  queryKey: ORDERS_KEY,
-  queryFn: async () => localRepository.getAll(),
-});
-```
-
-**Mutations** - With optimistic updates:
-```typescript
-const mutation = useMutation({
-  mutationFn: async (data) => { ... },
-  onMutate: async (data) => {
-    await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-    const previous = queryClient.getQueryData(ORDERS_KEY);
-    queryClient.setQueryData(ORDERS_KEY, (old) => /* optimistic update */);
-    return { previous };
-  },
-  onError: (err, data, context) => {
-    queryClient.setQueryData(ORDERS_KEY, context?.previous);
-  },
-  onSettled: () => {
-    queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-  },
-});
-```
-
-### Rust
-
-**Error Handling** - Use `?` operator with custom error types:
-```rust
-async fn handler() -> AppResult<Json<Data>> {
-    let result = some_operation()
-        .await
-        .map_err(AppError::database)?;
-    Ok(Json(result))
-}
-```
-
-**Avoid** manual match blocks for errors:
-```rust
-// Avoid
-match collection.find(filter).await {
-    Ok(cursor) => cursor,
-    Err(e) => {
-        tracing::error!("Failed: {}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new()));
-    }
-}
-```
-
-## Key Files
-
-### Extension
-| File | Purpose |
-|------|---------|
-| config/index.ts | Repository instances, environment config |
-| config/oauth.ts | OAuth configuration for Cognito |
-| config/env.ts | Environment variable imports |
-| repositories/ApiRepository.ts | HTTP client for cloud sync |
-| repositories/LocalStorageRepository.ts | Chrome storage wrapper |
-| hooks/useOrders.ts | useOrders, useUpdateOrderStatus, useDeleteOrders, useSaveOrder |
-| contexts/AuthContext.tsx | OAuth state, token management, refresh |
-| contexts/SyncContext.tsx | Sync state (isSyncing, lastSyncedAt, pendingCount) |
-| lib/syncQueue.ts | Sync queue with retry logic (exponential backoff) |
-| lib/cn.ts | clsx + tailwind-merge utility |
-| lib/errors.ts | Global error handler setup |
-| utils/orderFilters.ts | searchOrders, sortOrders, filterOrdersByStatus |
-| utils/orderExport.ts | exportOrdersToCSV (papaparse) |
-| schemas/order.ts | Zod schemas: OrderSchema, ScrapedOrderDataSchema |
-| content/content.ts | Main content script entry |
-| content/scraper.ts | Scrape order data from Amazon pages |
-| content/injector.ts | Inject save buttons on Amazon |
-
-### Extension Components
-| Component | Purpose |
-|-----------|---------|
-| OrderTable.tsx | Main table with filtering, sorting, selection |
-| OrderTableToolbar.tsx | Select all, delete, export controls |
-| OrderTableFilters.tsx | Search, status filter, sort dropdown |
-| OrderCard.tsx | Individual order with status buttons |
-| UserBar.tsx | Auth status, email, sync indicator |
-| DeleteConfirmModal.tsx | Single/bulk delete confirmation |
-| OrderEmptyStates.tsx | Loading, empty, no results states |
-| ErrorBoundary.tsx | React error boundary |
-| ui/button.tsx | Button (filled, tonal, outline, text, icon, destructive) |
-| ui/card.tsx | Card with elevation levels |
-| ui/badge.tsx | Badge (default, success, warning, info, destructive, outline) |
-
-### Server
-| File | Purpose |
-|------|---------|
-| main.rs | Server setup, routes, CORS, Swagger UI |
-| errors.rs | AppError type with IntoResponse impl |
-| auth/mod.rs | JWT validation middleware, JWKS caching |
-| routes/orders.rs | Order CRUD handlers |
-| models.rs | Order struct, OrderStatus enum, request/response types |
-| db.rs | MongoDB connection |
-
-## API Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /health | No | Health check |
-| GET | /me | Yes | Current user info from JWT |
-| GET | /orders | Yes | List user's orders |
-| POST | /orders | Yes | Upsert order (by order_number) |
-| GET | /orders/{id} | Yes | Get single order |
-| PATCH | /orders/{id} | Yes | Update order |
-| DELETE | /orders/{id} | Yes | Delete order |
-| GET | /swagger-ui | No | API documentation |
-| GET | /api-docs/openapi.json | No | OpenAPI schema |
-
-## Database
-
-### MongoDB
-- Database: `order_wizard`
-- Collection: `orders`
-
-### Indices
-Created automatically on startup:
-- `user_id` - for listing user's orders
-- `(user_id, order_number)` - unique, for upsert
-- `(id, user_id)` - for single order lookup
-
-## Environment Variables
-
-### Extension (.env)
-```
-VITE_COGNITO_AUTHORITY=https://cognito-idp.<region>.amazonaws.com/<pool-id>
-VITE_COGNITO_CLIENT_ID=<client-id>
-VITE_COGNITO_DOMAIN=https://<domain>.auth.<region>.amazoncognito.com
-VITE_API_BASE_URL=http://localhost:3000
-```
-
-### Server (.env)
-```
-MONGODB_URI=mongodb://localhost:27017
-OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
-OIDC_CLIENT_ID=<extension-public-client-id>
-OIDC_CLI_CLIENT_ID=<cli-public-client-id>
-RESOURCE_URI=https://api.example.com
-```
-
-## Data Model
-
-```typescript
-enum OrderStatus {
-  Uncommented = 'uncommented',
-  Commented = 'commented',
-  CommentRevealed = 'comment_revealed',
-  Reimbursed = 'reimbursed'
-}
-
-interface Order {
-  id: string;           // UUID
-  userId: string;       // Cognito sub claim
-  orderNumber: string;  // Amazon order number (unique per user)
-  productName: string;
-  orderDate: string;
-  productImage: string;
-  price: string;
-  status: OrderStatus;
-  note?: string;
-  updatedAt?: string;   // ISO timestamp for sync
-  createdAt?: string;
-  deletedAt?: string;   // Soft delete timestamp
-}
-
-interface AuthUser {
-  sub: string;
-  email?: string;
-  access_token: string;
-  id_token: string;
-  refresh_token?: string;
-  expires_at: number;
-}
-```
-
-## Utilities
-
-### Order Filtering (utils/orderFilters.ts)
-```typescript
-type StatusFilter = OrderStatus | 'all'
-type OrderSortOption = 'created-desc' | 'created-asc' | 'date-desc' | 'date-asc'
-
-searchOrders(orders, query)              // match-sorter fuzzy search
-sortOrders(orders, option)               // Sort by created or order date
-filterOrdersByStatus(orders, status)     // Filter by status
-filterAndSortOrders(orders, query, status, sort)  // Combined pipeline
-```
-
-### Sync Queue (lib/syncQueue.ts)
-```typescript
-type SyncOperation = 'create' | 'update' | 'delete'
-
-syncQueue.add(operation)       // Add to queue, deduplicate, process
-syncQueue.process()            // Process with retry (max 3, exponential backoff)
-syncQueue.getPendingCount()    // Get queue length
-syncQueue.subscribe(listener)  // Observer pattern for queue changes
-```
-
-## Dependencies
-
-### Extension (Key)
-- react ^19.1.1
-- @tanstack/react-query ^5.90
-- oauth4webapi ^3.8
-- zod ^4.1
-- papaparse ^5.5
-- lucide-react ^0.545
-- match-sorter ^8.2
-- tailwindcss ^4.1
-- clsx + tailwind-merge
-
-### Server
-- axum 0.8
-- mongodb (async driver)
-- jsonwebtoken + jwks_client
-- tokio (async runtime)
-- utoipa (OpenAPI)
+- Extension: `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_CLIENT_ID`,
+  `VITE_COGNITO_DOMAIN`, `VITE_API_BASE_URL` (see `.env.example`).
+- Server: `MONGODB_URI`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLI_CLIENT_ID`,
+  `OIDC_MCP_CLIENT_IDS`, `RESOURCE_URI`; capability limits are per app client.
+- Set `ENABLE_SWAGGER=true` for local Swagger/OpenAPI endpoints. Public OAuth
+  metadata and MCP do not require Swagger. See README for endpoint contracts.
+- The unique MongoDB index is `(user_id, order_number)`; application startup owns
+  index creation. Never weaken tenant filtering to work around duplicate data.

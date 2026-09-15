@@ -7,8 +7,8 @@ flowchart TB
     EXT["浏览器扩展<br/>offline-first 本地副本"]
     MCP_HOST["MCP Host / AI Agent"]
     SKILL_AGENT["Skill-capable AI Agent"]
-    SKILL["Order Wizard Skill<br/>选择命令 · 解释结果"]
-    CLI["Order Wizard CLI<br/>非交互 · 稳定 JSON"]
+    SKILL["OrderCue Skill<br/>选择命令 · 解释结果"]
+    CLI["OrderCue CLI<br/>非交互 · 稳定 JSON"]
 
     SKILL_AGENT --> SKILL -->|"界面 3 · 本地调用"| CLI
   end

@@ -37,7 +37,7 @@ Extension 和 CLI 都是可被用户检查的分发软件，不能安全保存 c
 建议建立 URL 形式的 resource-server identifier，例如占位符：
 
 ```text
-https://api.order-wizard.example
+https://api.ordercue.example
 ```
 
 URL identifier 既能用于 resource binding，也会成为 custom scope 的前缀。最小 scope 集与现有 application capabilities 一一对应：

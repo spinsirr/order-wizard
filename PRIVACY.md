@@ -1,15 +1,15 @@
 # Privacy Policy
 
-**Last updated:** January 23, 2026
+**Last updated:** September 11, 2026
 
 ## Overview
 
-Amazon Order Wizard ("the Extension") is a browser extension that helps users save and manage their Amazon orders. This privacy policy explains how we collect, use, and protect your data.
+OrderCue ("the Extension") is a browser extension that helps users save and manage their Amazon orders. This privacy policy explains how we collect, use, and protect your data.
 
 ## Data We Collect
 
 ### Order Data
-When you click "Save to Wizard" on an Amazon order, we collect:
+When you click "Save to OrderCue" on an Amazon order, we collect:
 - Order number
 - Product name
 - Order date
@@ -39,6 +39,9 @@ Cloud data is:
 - Encrypted in transit (HTTPS)
 - Associated with your user account
 - Deleted upon request
+
+### Return Reminders
+The extension checks saved order dates and reimbursement status locally to show return reminders. It stores the last reminder stage for each affected order on your device to avoid repeated notifications; this reminder history is not synced. Desktop notifications show counts of orders needing attention, without product names, order numbers, or prices. No additional data is collected or sent to a third party for reminders.
 
 ## Data We Do NOT Collect
 
@@ -77,15 +80,15 @@ You can:
 
 ## Data Retention
 
-- **Local data:** Retained until you delete it or uninstall the extension
-- **Cloud data:** Retained until you delete it or request account deletion
+- **Local data:** Saved on your device. Deleting an order hides it and retains a deletion record so offline devices can synchronize the deletion. Uninstalling the extension removes its local data.
+- **Cloud data:** Deleted orders are retained as synchronization deletion records to prevent older devices from restoring them. Request account deletion to remove account data permanently.
 
 ## Security
 
 We implement appropriate security measures including:
 - HTTPS encryption for all data in transit
 - Secure authentication via OAuth 2.0
-- No storage of authentication credentials
+- Passwords are handled by Amazon Cognito and are not stored by the extension. Access, ID, and refresh tokens are stored in Chrome local storage on your device to maintain your session. Signing out removes these tokens and stops cloud sync; saved orders remain available locally.
 
 ## Children's Privacy
 
@@ -102,4 +105,6 @@ https://github.com/spinsirr/order-wizard/issues
 
 ## Consent
 
-By using Amazon Order Wizard, you consent to this privacy policy.
+By using OrderCue, you consent to this privacy policy.
+
+OrderCue is an independent product and is not affiliated with or endorsed by Amazon.

@@ -1,144 +1,147 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AUTH_STORAGE_KEY, ORDERS_KEY } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
-import { localRepository, apiRepository } from '@/config';
+import { SYNC_QUEUE_QUERY_KEY, useSyncQueueCount } from '@/hooks/useSyncQueueCount';
+import { orderTime, StoredQueueSchema } from '@/lib/orderStorage';
 import { syncQueue } from '@/lib/syncQueue';
-import { useSyncQueueCount } from '@/hooks/useSyncQueueCount';
-import { ORDERS_KEY } from '@/constants';
-import type { Order } from '@/types';
-import type { ExtensionMessage } from '@/types/messages';
+import { apiRepository, localRepository } from '@/repositories';
+import type { AuthUser } from '@/types';
 
 interface SyncContextValue {
   isSyncing: boolean;
+  error: Error | null;
   lastSyncedAt: Date | null;
   pendingCount: number;
   triggerSync: () => void;
 }
-
 const SyncContext = createContext<SyncContextValue | null>(null);
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, workspaceUserId } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.sub;
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const pendingCount = useSyncQueueCount();
+  const pendingCount = useSyncQueueCount(workspaceUserId);
 
   async function pullAndMerge(uid: string) {
-    if (!apiRepository) return;
-
+    if (!apiRepository) {
+      return;
+    }
+    const stored = await chrome.storage.local.get<{ auth_user?: AuthUser }>(AUTH_STORAGE_KEY);
+    const session: AuthUser | undefined = stored[AUTH_STORAGE_KEY];
+    if (session?.sub !== uid || session.expires_at <= Date.now()) {
+      throw new Error('Sign in to resume sync');
+    }
+    await syncQueue.process(uid);
     const [localOrders, cloudOrders] = await Promise.all([
-      localRepository.getAll(),
-      apiRepository.getAll(),
+      localRepository.getAll(uid),
+      apiRepository.withAccessToken(session.access_token).getAll(),
     ]);
-
-    const localMap = new Map(localOrders.map((o) => [o.orderNumber, o]));
-    const cloudMap = new Map(cloudOrders.map((o) => [o.orderNumber, o]));
-    const allOrderNumbers = new Set([...localMap.keys(), ...cloudMap.keys()]);
-
-    const ordersToSaveLocally: Order[] = [];
-
-    for (const orderNumber of allOrderNumbers) {
-      const local = localMap.get(orderNumber);
-      const cloud = cloudMap.get(orderNumber);
-
-      if (local && cloud) {
-        const localTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
-        const cloudTime = new Date(cloud.updatedAt || cloud.createdAt || 0).getTime();
-
-        if (localTime > cloudTime) {
-          syncQueue.add({ type: 'upsert', order: { ...local, userId: uid } });
-        } else if (cloudTime > localTime) {
-          ordersToSaveLocally.push(cloud);
-        }
-      } else if (cloud && !local) {
-        ordersToSaveLocally.push(cloud);
-      } else if (local && !cloud) {
-        syncQueue.add({ type: 'upsert', order: { ...local, userId: uid } });
+    const cloudMap = new Map(cloudOrders.map((order) => [order.orderNumber, order]));
+    for (const cloud of cloudOrders) {
+      if (cloud.userId !== uid) {
+        throw new Error('Cloud order belongs to a different account');
       }
     }
-
-    if (ordersToSaveLocally.length > 0) {
-      await localRepository.saveBatch(ordersToSaveLocally);
-    }
-
-    await syncQueue.process();
-
-    // Only cleanup soft-deleted orders after confirming the sync queue is fully drained.
-    // If items remain (pending retries), their delete ops haven't been confirmed by the server yet.
-    const pendingCount = await syncQueue.getPendingCount();
-    if (pendingCount === 0) {
-      const updatedLocalOrders = await localRepository.getAll();
-      const toDelete = updatedLocalOrders.filter((o) => o.deletedAt).map((o) => o.id);
-      if (toDelete.length > 0) {
-        await localRepository.deleteBatch(toDelete);
-      }
-    }
-
-    if (ordersToSaveLocally.length > 0) {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-    }
+    // The broker compares against the current local version inside its transaction.
+    await localRepository.saveBatch(cloudOrders);
+    // Also recover local edits made while the panel was closed or before the outbox existed.
+    await syncQueue.enqueue(
+      localOrders.filter((local) => {
+        const cloud = cloudMap.get(local.orderNumber);
+        return !cloud || orderTime(local) > orderTime(cloud);
+      }),
+    );
+    await syncQueue.process(uid);
+    // Tombstones remain in both replicas; queue emptiness is not a deletion acknowledgement protocol.
   }
 
   const syncMutation = useMutation({
-    mutationFn: () => {
-      if (!userId) throw new Error('User ID not available');
-      return pullAndMerge(userId);
+    mutationFn: (uid: string) => pullAndMerge(uid),
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15000),
+    onSuccess: (_data, uid) => {
+      if (uid === activeUser.current) {
+        setLastSyncedAt(new Date());
+      }
     },
-    onSuccess: () => {
-      setLastSyncedAt(new Date());
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: SYNC_QUEUE_QUERY_KEY });
     },
   });
-
-  const hasSyncedRef = useRef(false);
+  const activeUser = useRef(userId);
+  activeUser.current = userId;
+  const syncedUser = useRef<string | null>(null);
   useEffect(() => {
-    if (isAuthenticated && apiRepository && userId && !hasSyncedRef.current) {
-      hasSyncedRef.current = true;
-      syncMutation.mutate();
+    if (isAuthenticated && userId && apiRepository && syncedUser.current !== userId) {
+      syncedUser.current = userId;
+      syncMutation.mutate(userId);
     }
     if (!isAuthenticated) {
-      hasSyncedRef.current = false;
+      syncedUser.current = null;
       setLastSyncedAt(null);
     }
   }, [isAuthenticated, userId, syncMutation.mutate]);
 
-  // Unified ORDER_SAVED listener: invalidate cache + queue for sync
   useEffect(() => {
-    const handleMessage = (
-      message: ExtensionMessage,
-      sender: chrome.runtime.MessageSender
-    ) => {
-      if (sender.id !== chrome.runtime.id) return;
-
-      if (message.type === 'ORDER_SAVED') {
-        queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-
-        if (isAuthenticated && apiRepository && userId) {
-          syncQueue.add({ type: 'upsert', order: { ...message.order, userId } });
-        }
+    const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'local') {
+        return;
+      }
+      if (changes['orders']) {
+        void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      }
+      if (!changes['sync_queue']) {
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: SYNC_QUEUE_QUERY_KEY });
+      if (!isAuthenticated || !userId || syncMutation.isPending) {
+        return;
+      }
+      const queue = StoredQueueSchema.safeParse(changes['sync_queue'].newValue ?? []);
+      // Let the normal sync path report corrupt storage instead of discarding it here.
+      if (
+        !queue.success ||
+        queue.data.some(
+          (item) => item.operation.type === 'upsert' && item.operation.order.userId === userId,
+        )
+      ) {
+        syncMutation.mutate(userId);
       }
     };
-    chrome.runtime.onMessage.addListener(handleMessage);
-    return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, [isAuthenticated, userId, queryClient]);
-
-  const triggerSync = () => {
-    if (isAuthenticated && userId && !syncMutation.isPending) {
-      syncMutation.mutate();
-    }
-  };
+    chrome.storage.onChanged.addListener(changed);
+    return () => chrome.storage.onChanged.removeListener(changed);
+  }, [isAuthenticated, userId, queryClient, syncMutation.isPending, syncMutation.mutate]);
 
   return (
-    <SyncContext.Provider value={{ isSyncing: syncMutation.isPending, lastSyncedAt, pendingCount, triggerSync }}>
+    <SyncContext.Provider
+      value={{
+        isSyncing: syncMutation.isPending,
+        error: syncMutation.error,
+        lastSyncedAt,
+        pendingCount,
+        triggerSync: () => {
+          if (isAuthenticated && userId && !syncMutation.isPending) {
+            syncMutation.mutate(userId);
+          }
+        },
+      }}
+    >
       {children}
     </SyncContext.Provider>
   );
 }
 
 export function useSync(): SyncContextValue {
-  const context = useContext(SyncContext);
-  if (!context) {
-    return { isSyncing: false, lastSyncedAt: null, pendingCount: 0, triggerSync: () => {} };
-  }
-  return context;
+  return (
+    useContext(SyncContext) ?? {
+      isSyncing: false,
+      error: null,
+      lastSyncedAt: null,
+      pendingCount: 0,
+      triggerSync: () => {},
+    }
+  );
 }

@@ -20,14 +20,12 @@ pub(crate) struct ApiClient {
 
 impl ApiClient {
     pub(crate) fn from_environment() -> Result<Self, CliError> {
-        let api_url = std::env::var("ORDER_WIZARD_API_URL")
-            .map_err(|_| CliError::config("ORDER_WIZARD_API_URL is not set"))?;
-        let access_token = std::env::var("ORDER_WIZARD_ACCESS_TOKEN")
-            .map_err(|_| CliError::auth("ORDER_WIZARD_ACCESS_TOKEN is not set"))?;
-        let base_url =
-            Url::parse(&format!("{}/", api_url.trim_end_matches('/'))).map_err(|error| {
-                CliError::config(format!("ORDER_WIZARD_API_URL is invalid: {error}"))
-            })?;
+        let api_url = std::env::var("ORDERCUE_API_URL")
+            .map_err(|_| CliError::config("ORDERCUE_API_URL is not set"))?;
+        let access_token = std::env::var("ORDERCUE_ACCESS_TOKEN")
+            .map_err(|_| CliError::auth("ORDERCUE_ACCESS_TOKEN is not set"))?;
+        let base_url = Url::parse(&format!("{}/", api_url.trim_end_matches('/')))
+            .map_err(|error| CliError::config(format!("ORDERCUE_API_URL is invalid: {error}")))?;
 
         Ok(Self {
             http: Client::new(),
@@ -103,7 +101,7 @@ impl ApiClient {
     fn order_endpoint(&self, id: &str) -> Result<Url, CliError> {
         let mut url = self.endpoint("agent/orders")?;
         url.path_segments_mut()
-            .map_err(|_| CliError::config("API URL cannot be a base URL"))?
+            .map_err(|()| CliError::config("API URL cannot be a base URL"))?
             .push(id);
         Ok(url)
     }
@@ -111,7 +109,7 @@ impl ApiClient {
     fn order_operation_endpoint(&self, id: &str, operation: &str) -> Result<Url, CliError> {
         let mut url = self.order_endpoint(id)?;
         url.path_segments_mut()
-            .map_err(|_| CliError::config("API URL cannot be a base URL"))?
+            .map_err(|()| CliError::config("API URL cannot be a base URL"))?
             .push(operation);
         Ok(url)
     }

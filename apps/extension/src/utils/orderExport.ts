@@ -95,7 +95,9 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
 async function fetchAllImages(orders: Order[]): Promise<(string | null)[]> {
   const results = await Promise.allSettled(
-    orders.map((o) => (o.productImage ? fetchImageAsBase64(o.productImage) : Promise.resolve(null))),
+    orders.map((o) =>
+      o.productImage ? fetchImageAsBase64(o.productImage) : Promise.resolve(null),
+    ),
   );
   return results.map((r) => (r.status === 'fulfilled' ? r.value : null));
 }
@@ -110,7 +112,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function dateSuffix(): string {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toISOString().slice(0, 10);
 }
 
 // --- CSV ---
@@ -136,7 +138,10 @@ export async function exportOrdersToCSV(orders: Order[]): Promise<void> {
     })),
   ];
 
-  const csv = Papa.unparse([...rows, ...summaryRows]);
+  const csv = Papa.unparse([...rows, ...summaryRows], {
+    escapeFormulae: true,
+    columns: ['Image URL', 'Order Number', 'Product Name', 'Order Date', 'Price', 'Status', 'Note'],
+  });
   downloadBlob(new Blob([csv], { type: 'text/csv' }), `amazon-orders-${dateSuffix()}.csv`);
 }
 
@@ -183,8 +188,7 @@ async function exportOrdersToXLSX(orders: Order[]): Promise<void> {
   };
 
   // Add data rows
-  for (let i = 0; i < orders.length; i++) {
-    const order = orders[i];
+  for (const [i, order] of orders.entries()) {
     const row = sheet.addRow({
       productImage: '',
       orderNumber: order.orderNumber,
@@ -297,8 +301,8 @@ async function exportOrdersToPDF(orders: Order[]): Promise<void> {
   // Date range from orders
   const dates = orders
     .map((o) => o.orderDate)
-    .filter(Boolean)
-    .sort();
+    .filter((date) => Number.isFinite(Date.parse(date)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
   const dateRange =
     dates.length > 1 ? `${dates[0]} — ${dates[dates.length - 1]}` : (dates[0] ?? 'N/A');
   doc.text(`Date Range: ${dateRange}`, 14, 27);
@@ -342,8 +346,7 @@ async function exportOrdersToPDF(orders: Order[]): Promise<void> {
         if (status) {
           const c = STATUS_COLORS[status];
           data.cell.styles.fillColor = [c.r, c.g, c.b];
-          data.cell.styles.textColor =
-            status === 'commented' ? [0, 0, 0] : [255, 255, 255];
+          data.cell.styles.textColor = status === 'commented' ? [0, 0, 0] : [255, 255, 255];
         }
       }
     },
@@ -399,8 +402,7 @@ async function exportOrdersToPDF(orders: Order[]): Promise<void> {
           if (status) {
             const c = STATUS_COLORS[status];
             data.cell.styles.fillColor = [c.r, c.g, c.b];
-            data.cell.styles.textColor =
-              status === 'commented' ? [0, 0, 0] : [255, 255, 255];
+            data.cell.styles.textColor = status === 'commented' ? [0, 0, 0] : [255, 255, 255];
           }
         }
       }

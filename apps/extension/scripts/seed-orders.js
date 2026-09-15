@@ -1,5 +1,5 @@
-// Paste this into the side panel's DevTools Console to seed fake orders.
-// To open DevTools on the side panel: right-click inside the panel → "Inspect".
+// Paste into the local demo page DevTools to replace its isolated sample dataset.
+// This helper refuses to run inside the real extension.
 //
 // Usage:
 //   seed(500)      // seed 500 orders
@@ -7,6 +7,9 @@
 //   clearOrders()  // wipe all orders
 
 (() => {
+  if (chrome.runtime.id !== 'ordercue-demo') {
+    throw new Error('Seed helpers are only available in the local demo workspace');
+  }
   const STATUSES = ['uncommented', 'commented', 'comment_revealed', 'reimbursed'];
   const SAMPLE_NAMES = [
     'Anker USB-C Charger 65W GaN III',
@@ -25,7 +28,7 @@
     const now = Date.now();
     const orders = Array.from({ length: n }, (_, i) => ({
       id: crypto.randomUUID(),
-      userId: 'local-dev',
+      userId: 'demo-user',
       orderNumber: `111-${String(1000000 + i).padStart(7, '0')}-${String(i % 10000).padStart(4, '0')}`,
       productName: `${SAMPLE_NAMES[i % SAMPLE_NAMES.length]} (#${i + 1})`,
       orderDate: new Date(now - i * 86_400_000).toISOString().slice(0, 10),
@@ -35,14 +38,14 @@
       createdAt: new Date(now - i * 60_000).toISOString(),
       updatedAt: new Date(now - i * 60_000).toISOString(),
     }));
-    await chrome.storage.local.set({ orders });
-    console.log(`Seeded ${n} orders. Reload the side panel to see them.`);
+    await chrome.storage.local.set({ orders, sync_queue: [], last_order_user: 'demo-user' });
+    console.info(`Seeded ${n} orders. Reload the side panel to see them.`);
   };
 
   window.clearOrders = async () => {
-    await chrome.storage.local.remove('orders');
-    console.log('Cleared orders. Reload the side panel.');
+    await chrome.storage.local.set({ orders: [], sync_queue: [] });
+    console.info('Cleared orders. Reload the side panel.');
   };
 
-  console.log('Seed helpers loaded: seed(n), clearOrders()');
+  console.info('Seed helpers loaded: seed(n), clearOrders()');
 })();

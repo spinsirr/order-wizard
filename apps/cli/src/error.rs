@@ -43,7 +43,7 @@ impl CliError {
         Self {
             error: ErrorBody {
                 code: "API_ERROR",
-                message: format!("Order Wizard API returned HTTP {status}"),
+                message: format!("OrderCue API returned HTTP {status}"),
                 status: Some(status),
                 details: Some(Box::new(details)),
             },
@@ -63,10 +63,16 @@ impl CliError {
         }
     }
 
+    #[must_use]
+    /// Serialize the machine-readable error envelope.
+    ///
+    /// # Panics
+    /// Panics if serialization fails; the envelope contains only JSON-compatible fields.
     pub fn as_json(&self) -> String {
         serde_json::to_string(self).expect("CLI errors must always be serializable")
     }
 
+    #[must_use]
     pub fn exit_code(&self) -> i32 {
         i32::from(self.exit_code)
     }

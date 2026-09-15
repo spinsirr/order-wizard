@@ -1,34 +1,41 @@
+import { type ReactNode, useEffect } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { UserBar } from '@/components/UserBar';
 import { OrderTable } from '@/components/OrderTable';
+import { UserBar } from '@/components/UserBar';
 import { useSync } from '@/contexts/SyncContext';
-import { useEffect } from 'react';
 import { initializeErrorHandlers } from '@/lib';
 
-function AppContent() {
-  const { isSyncing, lastSyncedAt, pendingCount, triggerSync } = useSync();
+interface AppProps {
+  emptyState?: ReactNode;
+  workspaceNotice?: ReactNode;
+}
+
+function AppContent({ emptyState, workspaceNotice }: AppProps) {
+  const { isSyncing, error: syncError, lastSyncedAt, pendingCount, triggerSync } = useSync();
 
   useEffect(() => {
     initializeErrorHandlers();
   }, []);
 
   return (
-    <div className="flex h-full w-full flex-col bg-background">
+    <main className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <UserBar
+        workspaceNotice={workspaceNotice}
         isSyncing={isSyncing}
+        syncError={syncError}
         lastSyncedAt={lastSyncedAt}
         pendingCount={pendingCount}
         onSync={triggerSync}
       />
-      <OrderTable />
-    </div>
+      <OrderTable emptyState={emptyState} />
+    </main>
   );
 }
 
-function App() {
+function App(props: AppProps) {
   return (
     <ErrorBoundary>
-      <AppContent />
+      <AppContent {...props} />
     </ErrorBoundary>
   );
 }

@@ -54,10 +54,10 @@ fn list_outputs_json_and_calls_only_the_agent_endpoint() {
     let response = r#"[{"id":"order-1","orderNumber":"111-1111111-1111111"}]"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "list"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -80,10 +80,10 @@ fn get_outputs_one_order_from_the_agent_endpoint() {
     let response = r#"{"id":"order-1","status":"uncommented"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "get", "order-1"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -101,7 +101,7 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
     let response = r#"[{"id":"order-1"}]"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args([
             "orders",
             "search",
@@ -111,8 +111,8 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
             "--limit",
             "10",
         ])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -128,10 +128,10 @@ fn status_updates_only_the_status_agent_endpoint() {
     let response = r#"{"id":"order-1","status":"reimbursed"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "status", "order-1", "reimbursed"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -146,10 +146,10 @@ fn note_updates_only_the_note_agent_endpoint() {
     let response = r#"{"id":"order-1","note":"Follow up tomorrow"}"#;
     let (api_url, server) = serve_once(response);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "note", "order-1", "Follow up tomorrow"])
-        .env("ORDER_WIZARD_API_URL", api_url)
-        .env("ORDER_WIZARD_ACCESS_TOKEN", "test-token")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
         .unwrap();
 
@@ -162,7 +162,7 @@ fn note_updates_only_the_note_agent_endpoint() {
 #[test]
 fn destructive_order_commands_are_not_exposed() {
     for command in ["create", "delete", "batch"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+        let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
             .args(["orders", command])
             .output()
             .unwrap();
@@ -176,10 +176,10 @@ fn destructive_order_commands_are_not_exposed() {
 
 #[test]
 fn missing_token_is_a_machine_readable_auth_error() {
-    let output = Command::new(env!("CARGO_BIN_EXE_order-wizard"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .args(["orders", "list"])
-        .env("ORDER_WIZARD_API_URL", "https://api.orderwizard.example")
-        .env_remove("ORDER_WIZARD_ACCESS_TOKEN")
+        .env("ORDERCUE_API_URL", "https://api.ordercue.example")
+        .env_remove("ORDERCUE_ACCESS_TOKEN")
         .output()
         .unwrap();
 

@@ -1,84 +1,40 @@
+import { mutateOrderStorage } from '@/lib/orderStorage';
+import { OrderSchema, type OrderUpdates } from '@/schemas/order';
 import type { Order } from '@/types';
 
 export class LocalStorageRepository {
-  private readonly STORAGE_KEY = 'orders';
-
-  private async getAllOrders(): Promise<Order[]> {
-    const result = await chrome.storage.local.get(this.STORAGE_KEY);
-    return (result[this.STORAGE_KEY] as Order[]) || [];
+  async getAll(userId?: string): Promise<Order[]> {
+    const result = await chrome.storage.local.get('orders');
+    const orders = OrderSchema.array().parse(result['orders'] ?? []);
+    return userId ? orders.filter((order) => order.userId === userId) : orders;
   }
 
-  private async saveAllOrders(orders: Order[]): Promise<void> {
-    await chrome.storage.local.set({ [this.STORAGE_KEY]: orders });
-  }
-
-  async save(order: Order): Promise<void> {
-    const orders = await this.getAllOrders();
-    const existingIndex = orders.findIndex((o) => o.orderNumber === order.orderNumber);
-    if (existingIndex !== -1) {
-      orders[existingIndex] = order;
-    } else {
-      orders.push(order);
+  async save(order: Order): Promise<Order> {
+    const saved = (await mutateOrderStorage({ kind: 'save', orders: [order] })).orders[0];
+    if (!saved) {
+      throw new Error('Order storage did not return the saved order');
     }
-    await this.saveAllOrders(orders);
+    return saved;
   }
 
-  async saveBatch(newOrders: Order[]): Promise<void> {
-    if (newOrders.length === 0) return;
-    const orders = await this.getAllOrders();
-    const orderMap = new Map(orders.map((o) => [o.orderNumber, o]));
-    for (const order of newOrders) {
-      orderMap.set(order.orderNumber, order);
+  /** Merge cloud snapshots without marking them as new local writes. */
+  async saveBatch(orders: Order[]): Promise<void> {
+    if (orders.length) {
+      await mutateOrderStorage({ kind: 'save', orders, fromCloud: true });
     }
-    await this.saveAllOrders([...orderMap.values()]);
   }
 
-  async getAll(): Promise<Order[]> {
-    return this.getAllOrders();
-  }
-
-  async update(id: string, updates: Partial<Order>): Promise<void> {
-    const orders = await this.getAllOrders();
-    const index = orders.findIndex((order) => order.id === id);
-
-    if (index === -1) {
+  async update(id: string, updates: OrderUpdates, userId: string): Promise<void> {
+    const changed = await this.updateMany([id], updates, userId);
+    if (!changed.length) {
       throw new Error(`Order with id ${id} not found`);
     }
-
-    orders[index] = { ...orders[index], ...updates };
-    await this.saveAllOrders(orders);
   }
 
-  async updateMany(ids: string[], updates: Partial<Order>): Promise<Order[]> {
-    if (ids.length === 0) return [];
-    const idSet = new Set(ids);
-    const orders = await this.getAllOrders();
-    const updated: Order[] = [];
-    const next = orders.map((order) => {
-      if (!idSet.has(order.id)) return order;
-      const merged = { ...order, ...updates };
-      updated.push(merged);
-      return merged;
-    });
-    await this.saveAllOrders(next);
-    return updated;
-  }
-
-  async delete(id: string): Promise<void> {
-    const orders = await this.getAllOrders();
-    const filtered = orders.filter((order) => order.id !== id);
-    await this.saveAllOrders(filtered);
-  }
-
-  async deleteBatch(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
-    const orders = await this.getAllOrders();
-    await this.saveAllOrders(orders.filter((o) => !idSet.has(o.id)));
-  }
-
-  async getById(id: string): Promise<Order | null> {
-    const orders = await this.getAllOrders();
-    return orders.find((order) => order.id === id) || null;
+  async updateMany(ids: string[], updates: OrderUpdates, userId: string): Promise<Order[]> {
+    if (!ids.length) {
+      return [];
+    }
+    return (await mutateOrderStorage({ kind: 'update', ids, updates, userId })).orders;
   }
 }

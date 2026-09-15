@@ -83,12 +83,8 @@ export async function revokeRefreshToken(
   server: oauth.AuthorizationServer = authorizationServer,
   client: oauth.Client = oauthClient,
 ): Promise<void> {
-  const response = await oauth.revocationRequest(
-    server,
-    client,
-    oauth.None(),
-    refreshToken,
-    { additionalParameters: { token_type_hint: 'refresh_token' } },
-  );
+  const response = await oauth.revocationRequest(server, client, oauth.None(), refreshToken, {
+    additionalParameters: { token_type_hint: 'refresh_token' },
+  });
   await oauth.processRevocationResponse(response);
 }

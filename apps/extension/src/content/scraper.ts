@@ -4,14 +4,13 @@ import { type ScrapedOrderData, ScrapedOrderDataSchema } from '@/schemas';
  * Scrape order data from Amazon order card
  */
 export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
-
   // Extract order number - it's in two spans within .yohtmlc-order-id
   const orderIdContainer = orderCard.querySelector('.yohtmlc-order-id');
   const orderIdSpans = orderIdContainer?.querySelectorAll('span');
   let orderNumber = '';
   if (orderIdSpans && orderIdSpans.length >= 2) {
     // Second span contains the actual order number
-    orderNumber = orderIdSpans[1].textContent?.trim() || '';
+    orderNumber = orderIdSpans[1]?.textContent?.trim() || '';
   }
 
   // Extract product name
@@ -35,7 +34,7 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
 
   // Extract product image - prefer high-res version
   const productImageElement = orderCard.querySelector('.product-image img') as HTMLImageElement;
-  let productImage = productImageElement?.dataset.aHires || productImageElement?.src || '';
+  let productImage = productImageElement?.dataset['aHires'] || productImageElement?.src || '';
   // Replace small size parameters with high-res _AC_SL1500_ (1500px)
   // Thumbnail: ._AC_US40_. or ._SX300_SY300_. -> ._AC_SL1500_.
   if (productImage) {
@@ -63,7 +62,6 @@ export function scrapeOrderData(orderCard: Element): ScrapedOrderData {
     productImage,
     price,
   };
-
 
   // Validate with Zod schema - will throw if invalid
   return ScrapedOrderDataSchema.parse(rawData);

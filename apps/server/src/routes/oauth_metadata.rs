@@ -21,7 +21,7 @@ impl ProtectedResourceMetadata {
         let scopes_supported = agent_scope_values(&resource);
         Self {
             resource,
-            resource_name: "Order Wizard API",
+            resource_name: "OrderCue API",
             authorization_servers: vec![authorization_server.into()],
             scopes_supported,
             bearer_methods_supported: ["header"],

@@ -12,10 +12,18 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["chrome", "node"],
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "useUnknownInCatchVariables": true
   },
-  "include": ["src", "wxt.config.ts", ".wxt/wxt.d.ts"]
+  "include": ["src", "wxt.config.ts", ".wxt/wxt.d.ts"],
+  "exclude": ["src/__tests__"]
 }

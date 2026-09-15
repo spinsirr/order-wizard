@@ -1,27 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
-import { localRepository } from '@/config';
-import { syncQueue } from '@/lib/syncQueue';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ORDERS_KEY } from '@/constants';
-import type { Order, OrderStatus } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { localRepository } from '@/repositories';
+import type { OrderStatus } from '@/types';
 
-/**
- * Local-First Order Management
- *
- * All reads/writes go to localStorage.
- * Cloud sync is handled separately by useCloudSync.
- */
-
-/**
- * Read orders from localStorage
- */
+/** Read the active account’s local replica. The broker owns persisted versions. */
 export function useOrders() {
-  const { isLoading } = useAuth();
+  const { isLoading, workspaceUserId } = useAuth();
 
   return useQuery({
-    queryKey: ORDERS_KEY,
+    queryKey: [...ORDERS_KEY, workspaceUserId],
     queryFn: async () => {
-      const orders = await localRepository.getAll();
+      const orders = await localRepository.getAll(workspaceUserId);
       return orders.filter((order) => !order.deletedAt);
     },
     staleTime: 1000 * 60,
@@ -34,36 +24,14 @@ export function useOrders() {
  */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, user } = useAuth();
+  const { workspaceUserId } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
-      const updatedAt = new Date().toISOString();
-
-      // Update locally first (offline-first)
-      await localRepository.update(id, { status, updatedAt });
-
-      // Queue for cloud sync (non-blocking) - upsert the full order
-      if (isAuthenticated && user) {
-        const order = await localRepository.getById(id);
-        if (order) {
-          syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
-        }
-      }
-    },
-    onMutate: async ({ id, status }) => {
-      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
-        old?.map((order) => (order.id === id ? { ...order, status } : order))
-      );
-      return { previousOrders };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      await localRepository.update(id, { status }, workspaceUserId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      return queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     },
   });
 }
@@ -73,36 +41,16 @@ export function useUpdateOrderStatus() {
  */
 export function useUpdateOrderNote() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, user } = useAuth();
+  const { workspaceUserId } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, note }: { id: string; note: string }) => {
-      const updatedAt = new Date().toISOString();
-      const nextNote = note.trim() ? note : undefined;
+      const nextNote = note.trim() ? note : '';
 
-      await localRepository.update(id, { note: nextNote, updatedAt });
-
-      if (isAuthenticated && user) {
-        const order = await localRepository.getById(id);
-        if (order) {
-          syncQueue.add({ type: 'upsert', order: { ...order, userId: user.sub } });
-        }
-      }
-    },
-    onMutate: async ({ id, note }) => {
-      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-      const nextNote = note.trim() ? note : undefined;
-      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
-        old?.map((order) => (order.id === id ? { ...order, note: nextNote } : order))
-      );
-      return { previousOrders };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      await localRepository.update(id, { note: nextNote }, workspaceUserId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      return queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     },
   });
 }
@@ -112,51 +60,20 @@ export function useUpdateOrderNote() {
  */
 export function useDeleteOrders() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, user } = useAuth();
+  const { workspaceUserId } = useAuth();
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      if (ids.length === 0) return;
+      if (ids.length === 0) {
+        return;
+      }
       const now = new Date().toISOString();
 
       // Single read-modify-write pass for the whole batch.
-      const updated = await localRepository.updateMany(ids, { deletedAt: now, updatedAt: now });
-
-      if (isAuthenticated && user) {
-        for (const order of updated) {
-          syncQueue.add({ type: 'delete', orderId: order.id, orderNumber: order.orderNumber });
-        }
-      }
-    },
-    onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey: ORDERS_KEY });
-      const previousOrders = queryClient.getQueryData<Order[]>(ORDERS_KEY);
-      queryClient.setQueryData<Order[]>(ORDERS_KEY, (old) =>
-        old?.filter((order) => !ids.includes(order.id))
-      );
-      return { previousOrders };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousOrders) queryClient.setQueryData(ORDERS_KEY, context.previousOrders);
+      await localRepository.updateMany(ids, { deletedAt: now }, workspaceUserId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-    },
-  });
-}
-
-/**
- * Save a new order
- */
-export function useSaveOrder() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (order: Order) => {
-      await localRepository.save(order);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      return queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     },
   });
 }

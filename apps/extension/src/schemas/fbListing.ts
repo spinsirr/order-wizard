@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FBCondition, FBCategory, PriceRounding } from '@/types';
+import { FBCategory, FBCondition, PriceRounding } from '@/types';
 
 export const FBListingTemplateSchema = z.object({
   discountPercent: z.number().min(0).max(100),
@@ -30,4 +30,5 @@ export const ProductDetailsSchema = z.object({
   features: z.array(z.string()),
   images: z.array(z.string().url()),
   category: z.string().optional(),
+  currentPrice: z.string().optional(),
 });

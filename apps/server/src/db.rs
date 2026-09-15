@@ -1,4 +1,4 @@
-use mongodb::{bson::doc, Client, Collection, Database};
+use mongodb::{bson::doc, options::IndexOptions, Client, Collection, Database, IndexModel};
 
 use crate::models::OrderEntity;
 
@@ -10,6 +10,7 @@ pub async fn connect() -> Result<Database, mongodb::error::Error> {
 
     // Ping to verify connection
     db.run_command(doc! { "ping": 1 }).await?;
+    ensure_order_indexes(&orders_collection(&db)).await?;
     tracing::info!("Connected to MongoDB");
 
     Ok(db)
@@ -17,4 +18,40 @@ pub async fn connect() -> Result<Database, mongodb::error::Error> {
 
 pub fn orders_collection(database: &Database) -> Collection<OrderEntity> {
     database.collection("orders")
+}
+
+/// Also runs for databases provisioned outside docker-compose.
+pub(crate) async fn ensure_order_indexes(
+    collection: &Collection<OrderEntity>,
+) -> Result<(), mongodb::error::Error> {
+    collection
+        .create_indexes([
+            IndexModel::builder()
+                .keys(doc! { "user_id": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("idx_user_id".to_string())
+                        .build(),
+                )
+                .build(),
+            IndexModel::builder()
+                .keys(doc! { "user_id": 1, "order_number": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("idx_user_order_unique".to_string())
+                        .unique(true)
+                        .build(),
+                )
+                .build(),
+            IndexModel::builder()
+                .keys(doc! { "id": 1, "user_id": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("idx_id_user".to_string())
+                        .build(),
+                )
+                .build(),
+        ])
+        .await?;
+    Ok(())
 }

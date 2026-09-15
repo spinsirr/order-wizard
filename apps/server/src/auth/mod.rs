@@ -8,7 +8,11 @@ use axum::{
 };
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
@@ -58,7 +62,7 @@ pub struct JwksVerifier {
 
 impl JwksVerifier {
     pub fn new(issuer: String, policy: AuthPolicy) -> Self {
-        let jwks_url = format!("{}/.well-known/jwks.json", issuer);
+        let jwks_url = format!("{issuer}/.well-known/jwks.json");
         Self {
             cache: Arc::new(RwLock::new(None)),
             jwks_url,
@@ -71,18 +75,18 @@ impl JwksVerifier {
     async fn fetch_jwks(&self) -> Result<HashMap<String, DecodingKey>, String> {
         let response = reqwest::get(&self.jwks_url)
             .await
-            .map_err(|e| format!("Failed to fetch JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to fetch JWKS: {e}"))?;
 
         let jwks: Jwks = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to parse JWKS: {e}"))?;
 
         let mut keys = HashMap::new();
         for jwk in jwks.keys {
             if jwk.kty == "RSA" && jwk.alg == "RS256" {
                 let key = DecodingKey::from_rsa_components(&jwk.n, &jwk.e)
-                    .map_err(|e| format!("Failed to create decoding key: {}", e))?;
+                    .map_err(|e| format!("Failed to create decoding key: {e}"))?;
                 keys.insert(jwk.kid, key);
             }
         }
@@ -181,29 +185,39 @@ pub struct Claims {
 #[derive(Clone, Debug)]
 pub struct AuthPolicy {
     extension_client_id: String,
-    cli_client_id: String,
+    agent_client_ids: HashSet<String>,
     resource_server_identifier: String,
 }
 
 impl AuthPolicy {
     pub fn new(
         extension_client_id: impl Into<String>,
-        cli_client_id: impl Into<String>,
         resource_server_identifier: impl Into<String>,
-    ) -> Result<Self, &'static str> {
-        let extension_client_id = extension_client_id.into();
-        let cli_client_id = cli_client_id.into();
-        if extension_client_id == cli_client_id {
-            return Err("OIDC_CLIENT_ID and OIDC_CLI_CLIENT_ID must be different");
-        }
-        Ok(Self {
-            extension_client_id,
-            cli_client_id,
+    ) -> Self {
+        Self {
+            extension_client_id: extension_client_id.into(),
+            agent_client_ids: HashSet::new(),
             resource_server_identifier: resource_server_identifier
                 .into()
                 .trim_end_matches('/')
                 .to_string(),
-        })
+        }
+    }
+
+    pub fn with_agent_clients(
+        mut self,
+        client_ids: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<Self, &'static str> {
+        for client_id in client_ids {
+            let client_id = client_id.into();
+            if client_id == self.extension_client_id {
+                return Err("Agent client IDs must be different from OIDC_CLIENT_ID");
+            }
+            if !client_id.is_empty() {
+                self.agent_client_ids.insert(client_id);
+            }
+        }
+        Ok(self)
     }
 
     fn principal_for(&self, claims: &Claims) -> Result<Principal, &'static str> {
@@ -220,8 +234,8 @@ impl AuthPolicy {
             return Err("Token audience does not match this resource");
         }
         let is_extension = client_id == self.extension_client_id;
-        let is_cli = client_id == self.cli_client_id;
-        if !is_extension && !is_cli {
+        let is_agent = self.agent_client_ids.contains(client_id);
+        if !is_extension && !is_agent {
             return Err("Token was issued to an unsupported client");
         }
 
@@ -329,24 +343,17 @@ pub async fn auth_middleware(
     next: Next,
 ) -> Response {
     // Extract token from Authorization header
-    let auth_header = match request
+    let Some(auth_header) = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
-    {
-        Some(h) => h,
-        None => {
-            return AuthError::invalid_request("Missing Authorization header")
-                .into_response_with_policy(&verifier.policy);
-        }
+    else {
+        return AuthError::invalid_request("Missing Authorization header")
+            .into_response_with_policy(&verifier.policy);
     };
-
-    let token = match auth_header.strip_prefix("Bearer ") {
-        Some(t) => t,
-        None => {
-            return AuthError::invalid_request("Authorization header must use Bearer scheme")
-                .into_response_with_policy(&verifier.policy);
-        }
+    let Some(token) = auth_header.strip_prefix("Bearer ") else {
+        return AuthError::invalid_request("Authorization header must use Bearer scheme")
+            .into_response_with_policy(&verifier.policy);
     };
 
     // Verify the token

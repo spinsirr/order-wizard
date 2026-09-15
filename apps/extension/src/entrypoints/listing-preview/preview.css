@@ -1,0 +1,5 @@
+html body {
+  min-width: 0;
+  background: transparent;
+  overscroll-behavior: none;
+}

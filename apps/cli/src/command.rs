@@ -2,11 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 #[derive(Debug, Parser)]
-#[command(
-    name = "order-wizard",
-    version,
-    about = "Agent-friendly Order Wizard client"
-)]
+#[command(name = "ordercue", version, about = "Agent-friendly OrderCue client")]
 pub struct Cli {
     #[command(subcommand)]
     pub(crate) command: Command,

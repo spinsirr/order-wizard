@@ -1,13 +1,39 @@
+import { executeListingDraftCommand } from '@/background/listingDraft';
+import { executeOrderStorageCommand } from '@/background/orderStorage';
+import { initializeReturnReminders } from '@/background/returnReminders';
 import { initializeErrorHandlers } from '@/lib';
 import type { ExtensionMessage } from '@/types/messages';
 
 export default defineBackground(() => {
   initializeErrorHandlers();
+  initializeReturnReminders();
 
   chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
-    if (sender.id !== chrome.runtime.id) return false;
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
 
     switch (message.type) {
+      case 'LISTING_DRAFT':
+        executeListingDraftCommand(message.command)
+          .then(() => sendResponse({ ok: true }))
+          .catch((error: unknown) =>
+            sendResponse({
+              error: error instanceof Error ? error.message : 'Draft storage failed',
+            }),
+          );
+        return true;
+
+      case 'ORDER_STORAGE':
+        executeOrderStorageCommand(message.command)
+          .then(sendResponse)
+          .catch((error: unknown) =>
+            sendResponse({
+              error: error instanceof Error ? error.message : 'Order storage failed',
+            }),
+          );
+        return true;
+
       case 'PING':
         sendResponse({ status: 'OK' });
         break;
@@ -15,21 +41,33 @@ export default defineBackground(() => {
       case 'FETCH_URL':
         handleFetchUrl(message.url)
           .then(sendResponse)
-          .catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' }));
+          .catch((error: unknown) =>
+            sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' }),
+          );
         return true;
 
       case 'OPEN_FB_MARKETPLACE':
-        chrome.tabs.create({
-          url: 'https://www.facebook.com/marketplace/create/item',
-          active: true,
-        });
-        break;
+        void chrome.tabs
+          .create({ url: 'https://www.facebook.com/marketplace/create/item', active: true })
+          .then(() => sendResponse({ ok: true }))
+          .catch((error: unknown) =>
+            sendResponse({
+              error: error instanceof Error ? error.message : 'Could not open Marketplace',
+            }),
+          );
+        return true;
     }
 
     return false;
   });
 
-  const ALLOWED_FETCH_ORIGINS = ['https://www.amazon.com', 'https://www.amazon.co.uk', 'https://www.amazon.ca', 'https://www.amazon.de', 'https://www.amazon.co.jp'];
+  const ALLOWED_FETCH_ORIGINS = [
+    'https://www.amazon.com',
+    'https://www.amazon.co.uk',
+    'https://www.amazon.ca',
+    'https://www.amazon.de',
+    'https://www.amazon.co.jp',
+  ];
 
   async function handleFetchUrl(url: string): Promise<{ html?: string; error?: string }> {
     try {

@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import { scrapeOrderData } from './scraper';
+import { localRepository } from '@/repositories';
 import type { Order } from '@/types';
-import type { ExtensionMessage } from '@/types/messages';
 import { OrderStatus } from '@/types';
-import { localRepository } from '@/config';
+import type { ExtensionMessage } from '@/types/messages';
+import { scrapeOrderData } from './scraper';
 
 export interface SaveOrderResult {
   success: boolean;
@@ -14,11 +14,11 @@ export interface SaveOrderResult {
 
 export async function saveOrder(orderCard: Element, userId: string): Promise<SaveOrderResult> {
   const scrapedData = scrapeOrderData(orderCard);
-  const allOrders = await localRepository.getAll();
+  const allOrders = await localRepository.getAll(userId);
 
   // Check if order already exists (non-deleted)
   const existingOrder = allOrders.find(
-    (o: Order) => o.orderNumber === scrapedData.orderNumber && !o.deletedAt
+    (o: Order) => o.orderNumber === scrapedData.orderNumber && !o.deletedAt,
   );
 
   if (existingOrder) {
@@ -27,7 +27,7 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
 
   // Check if there's a soft-deleted order with the same orderNumber
   const deletedOrder = allOrders.find(
-    (o: Order) => o.orderNumber === scrapedData.orderNumber && o.deletedAt
+    (o: Order) => o.orderNumber === scrapedData.orderNumber && o.deletedAt,
   );
 
   let order: Order;
@@ -53,15 +53,17 @@ export async function saveOrder(orderCard: Element, userId: string): Promise<Sav
     };
   }
 
-  await localRepository.save(order);
+  order = await localRepository.save(order);
 
   // Notify popup if open (ignore errors if popup is closed)
-  chrome.runtime.sendMessage({
-    type: 'ORDER_SAVED',
-    order,
-  } satisfies ExtensionMessage).catch(() => {
-    // Popup not open, ignore
-  });
+  chrome.runtime
+    .sendMessage({
+      type: 'ORDER_SAVED',
+      order,
+    } satisfies ExtensionMessage)
+    .catch(() => {
+      // Popup not open, ignore
+    });
 
   return { success: true, isDuplicate: false, order };
 }

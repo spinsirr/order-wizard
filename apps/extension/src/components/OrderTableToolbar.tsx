@@ -1,23 +1,41 @@
 import {
-  CheckCircle2,
+  ArrowUpDown,
   ChevronDown,
-  Circle,
-  ClipboardList,
   Download,
   FileSpreadsheet,
   FileText,
-  Minus,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { ExportFormat } from '@/utils/orderExport';
-import { Button } from './ui/button';
+import type { OrderSortOption } from '@/utils/orderFilters';
 
 const EXPORT_OPTIONS: { format: ExportFormat; label: string; icon: typeof FileText }[] = [
   { format: 'csv', label: 'CSV', icon: FileText },
-  { format: 'xlsx', label: 'Excel (.xlsx)', icon: FileSpreadsheet },
+  { format: 'xlsx', label: 'Excel workbook', icon: FileSpreadsheet },
   { format: 'pdf', label: 'PDF', icon: FileText },
+];
+
+const SORT_OPTIONS: { value: OrderSortOption; label: string }[] = [
+  { value: 'created-desc', label: 'Recent' },
+  { value: 'created-asc', label: 'Oldest' },
+  { value: 'date-desc', label: 'Order date ↓' },
+  { value: 'date-asc', label: 'Order date ↑' },
 ];
 
 interface OrderTableToolbarProps {
@@ -25,9 +43,11 @@ interface OrderTableToolbarProps {
   selectedCount: number;
   allSelected: boolean;
   someSelected: boolean;
+  sortOption: OrderSortOption;
   onToggleSelectAll: (checked: boolean) => void;
   onDeleteSelected: () => void;
   onExport: (format: ExportFormat) => void;
+  onSortOptionChange: (option: OrderSortOption) => void;
 }
 
 export function OrderTableToolbar({
@@ -35,108 +55,83 @@ export function OrderTableToolbar({
   selectedCount,
   allSelected,
   someSelected,
+  sortOption,
   onToggleSelectAll,
   onDeleteSelected,
   onExport,
+  onSortOptionChange,
 }: OrderTableToolbarProps) {
   const hasSelection = selectedCount > 0;
-  const [exportOpen, setExportOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!exportOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setExportOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [exportOpen]);
+  const checked = allSelected ? true : someSelected ? 'indeterminate' : false;
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="px-1 text-sm text-muted-foreground sm:px-0">
-        {selectedCount > 0
-          ? `${selectedCount} order${selectedCount === 1 ? '' : 's'} selected`
-          : `${displayCount} saved order${displayCount === 1 ? '' : 's'}`}
+    <div className="flex min-h-8 items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Checkbox
+          id="select-visible-orders"
+          checked={checked}
+          onCheckedChange={(next) => onToggleSelectAll(next === true)}
+          aria-label="Select all visible orders"
+        />
+        <Label htmlFor="select-visible-orders" className="min-w-0 truncate text-caption">
+          {hasSelection
+            ? `${selectedCount} selected`
+            : `${displayCount} order${displayCount === 1 ? '' : 's'}`}
+        </Label>
       </div>
-      <div className="flex flex-wrap items-center gap-2.5 px-1 sm:px-0">
-        <div className="flex w-full items-center gap-2 justify-between sm:w-auto sm:flex-1 sm:flex-row-reverse sm:gap-3">
-          <button
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        {hasSelection ? (
+          <Button
             type="button"
-            className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-            aria-pressed={allSelected || someSelected}
-            onClick={() => onToggleSelectAll(!allSelected)}
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onDeleteSelected}
           >
-            <span
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-full border transition',
-                allSelected
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : someSelected
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-muted text-muted-foreground',
-              )}
-            >
-              {allSelected ? (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              ) : someSelected ? (
-                <Minus className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Circle className="h-4 w-4" aria-hidden="true" />
-              )}
-            </span>
-            Select all
-          </button>
-          <span
-            className={cn(
-              'flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-opacity duration-150',
-              hasSelection ? 'opacity-100 visible' : 'opacity-0 invisible',
-            )}
-            aria-hidden={!hasSelection}
-          >
-            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-            {selectedCount} selected
-          </span>
-        </div>
-        <Button
-          onClick={onDeleteSelected}
-          size="sm"
-          variant="destructive"
-          disabled={selectedCount === 0}
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Delete Selected
-        </Button>
-        <div className="relative" ref={dropdownRef}>
-          <Button onClick={() => setExportOpen((prev) => !prev)} size="sm" variant="tonal">
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Export
-            <ChevronDown
-              className={cn('h-3.5 w-3.5 transition-transform', exportOpen && 'rotate-180')}
-              aria-hidden="true"
-            />
+            <Trash2 aria-hidden="true" />
+            Delete
           </Button>
-          {exportOpen && (
-            <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface-container shadow-lg">
-              {EXPORT_OPTIONS.map(({ format, label, icon: Icon }) => (
-                <button
-                  key={format}
-                  type="button"
-                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
-                  onClick={() => {
-                    onExport(format);
-                    setExportOpen(false);
-                  }}
-                >
-                  <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  {label}
-                </button>
+        ) : (
+          <Select
+            value={sortOption}
+            onValueChange={(value) => onSortOptionChange(value as OrderSortOption)}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label="Sort orders"
+              className="w-[120px] bg-card pl-2.5 text-caption shadow-none"
+            >
+              <ArrowUpDown className="size-3.5" aria-hidden="true" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              {SORT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
               ))}
-            </div>
-          )}
-        </div>
+            </SelectContent>
+          </Select>
+        )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="text-caption">
+              <Download aria-hidden="true" />
+              Export
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {EXPORT_OPTIONS.map(({ format, label, icon: Icon }) => (
+              <DropdownMenuItem key={format} onSelect={() => onExport(format)}>
+                <Icon aria-hidden="true" />
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

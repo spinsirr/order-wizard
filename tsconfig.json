@@ -1,0 +1,10 @@
+{
+  "extends": "./apps/extension/tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "lib": ["ES2024"],
+    "noEmit": true
+  },
+  "include": ["scripts/**/*.ts"],
+  "exclude": []
+}

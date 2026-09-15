@@ -1,15 +1,15 @@
-import { initializeErrorHandlers } from '@/lib';
-import { getCurrentUser } from '@/content/userResolver';
-import { saveOrder } from '@/content/orderProcessor';
+import { initFBMarketplace } from '@/content/fbMarketplace';
 import {
   injectSaveButtons,
   setupMutationObserver,
-  showSuccessFeedback,
   showDuplicateFeedback,
   showErrorFeedback,
   showRefreshFeedback,
+  showSuccessFeedback,
 } from '@/content/injector';
-import { initFBMarketplace } from '@/content/fbMarketplace';
+import { saveOrder } from '@/content/orderProcessor';
+import { getCurrentUser } from '@/content/userResolver';
+import { initializeErrorHandlers } from '@/lib';
 
 export default defineContentScript({
   matches: [
@@ -17,7 +17,7 @@ export default defineContentScript({
     '*://*.amazon.com/your-orders/orders*',
   ],
   runAt: 'document_idle',
-  main() {
+  main(ctx) {
     initializeErrorHandlers();
 
     async function handleSaveClick(orderCard: Element, button: HTMLButtonElement): Promise<void> {
@@ -43,11 +43,11 @@ export default defineContentScript({
       }
     }
 
-    console.log('Amazon Order Wizard content script loaded');
+    console.info('OrderCue content script loaded');
 
     injectSaveButtons(handleSaveClick);
     setupMutationObserver(handleSaveClick);
 
-    initFBMarketplace();
+    initFBMarketplace(ctx);
   },
 });

@@ -1,14 +1,12 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { syncQueue } from '@/lib/syncQueue';
 
-export function useSyncQueueCount(): number {
-  useEffect(() => {
-    syncQueue.hydrate();
-  }, []);
+export const SYNC_QUEUE_QUERY_KEY = ['sync-queue'] as const;
 
-  return useSyncExternalStore(
-    syncQueue.subscribe.bind(syncQueue),
-    syncQueue.getSnapshot.bind(syncQueue),
-    syncQueue.getServerSnapshot.bind(syncQueue)
-  );
+export function useSyncQueueCount(userId?: string): number {
+  const { data = 0 } = useQuery({
+    queryKey: [...SYNC_QUEUE_QUERY_KEY, userId],
+    queryFn: () => syncQueue.getPendingCount(userId),
+  });
+  return data;
 }

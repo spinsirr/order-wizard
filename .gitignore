@@ -8,16 +8,19 @@ dist/
 target/
 .wxt/
 .output/
+storybook-static/
 *.tsbuildinfo
 
 # Turborepo
 .turbo/
+.vercel/
 
 # Environment files
 .env
 .env.local
 .env.*.local
 .env.production
+.env.submit
 
 # IDE
 .idea/

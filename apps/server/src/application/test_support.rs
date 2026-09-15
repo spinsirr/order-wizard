@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use super::{
     ApplicationError, OrderSearch, TenantScopedOrderRepository, UpdateOrder, UpsertResult, UserId,
 };
-use crate::models::{Order, OrderStatus};
+use crate::models::Order;
 
 pub(crate) struct InMemoryOrderRepository {
     orders: RwLock<Vec<Order>>,
@@ -63,7 +63,7 @@ impl TenantScopedOrderRepository for InMemoryOrderRepository {
             .expect("in-memory order repository lock poisoned");
         Ok(orders
             .iter()
-            .filter(|order| order.user_id == user_id.as_str())
+            .filter(|order| order.user_id == user_id.as_str() && order.deleted_at.is_none())
             .filter(|order| {
                 search
                     .status
@@ -98,7 +98,9 @@ impl TenantScopedOrderRepository for InMemoryOrderRepository {
         if let Some(existing) = orders.iter_mut().find(|existing| {
             existing.user_id == user_id.as_str() && existing.order_number == order.order_number
         }) {
-            if should_replace(existing, &order) {
+            if super::timestamps::should_replace(existing, &order)? {
+                let mut order = order;
+                order.id = existing.id.clone();
                 *existing = order.clone();
                 Ok(UpsertResult {
                     order,
@@ -119,120 +121,33 @@ impl TenantScopedOrderRepository for InMemoryOrderRepository {
         }
     }
 
-    async fn update_status(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        status: OrderStatus,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError> {
-        let mut orders = self
-            .orders
-            .write()
-            .expect("in-memory order repository lock poisoned");
-        let order = orders
-            .iter_mut()
-            .find(|order| order.user_id == user_id.as_str() && order.id == order_id);
-        if let Some(order) = order {
-            order.status = status;
-            order.updated_at = Some(updated_at.to_string());
-            Ok(Some(order.clone()))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn update_note(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        note: &str,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError> {
-        let mut orders = self
-            .orders
-            .write()
-            .expect("in-memory order repository lock poisoned");
-        let order = orders
-            .iter_mut()
-            .find(|order| order.user_id == user_id.as_str() && order.id == order_id);
-        if let Some(order) = order {
-            order.note = Some(note.to_string());
-            order.updated_at = Some(updated_at.to_string());
-            Ok(Some(order.clone()))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn delete(&self, user_id: &UserId, order_id: &str) -> Result<bool, ApplicationError> {
-        let mut orders = self
-            .orders
-            .write()
-            .expect("in-memory order repository lock poisoned");
-        let original_len = orders.len();
-        orders.retain(|order| !(order.user_id == user_id.as_str() && order.id == order_id));
-        Ok(orders.len() != original_len)
-    }
-
     async fn update(
         &self,
         user_id: &UserId,
         order_id: &str,
         update: UpdateOrder,
+        now: &str,
     ) -> Result<Option<Order>, ApplicationError> {
         let mut orders = self
             .orders
             .write()
             .expect("in-memory order repository lock poisoned");
-        let order = orders
-            .iter_mut()
-            .find(|order| order.user_id == user_id.as_str() && order.id == order_id);
-        if let Some(order) = order {
-            if let Some(status) = update.status {
-                order.status = status;
-            }
-            if let Some(note) = update.note {
-                order.note = Some(note);
-            }
-            if let Some(updated_at) = update.updated_at {
-                order.updated_at = Some(updated_at);
-            }
-            if let Some(deleted_at) = update.deleted_at {
-                order.deleted_at = Some(deleted_at);
-            }
-            Ok(Some(order.clone()))
-        } else {
-            Ok(None)
+        let Some(order) = orders.iter_mut().find(|order| {
+            order.user_id == user_id.as_str() && order.id == order_id && order.deleted_at.is_none()
+        }) else {
+            return Ok(None);
+        };
+        let patch = update.at_version(order, now)?;
+        if let Some(status) = patch.status {
+            order.status = status;
         }
+        if let Some(note) = patch.note {
+            order.note = Some(note);
+        }
+        order.updated_at = patch.updated_at;
+        if let Some(deleted_at) = patch.deleted_at {
+            order.deleted_at = Some(deleted_at);
+        }
+        Ok(Some(order.clone()))
     }
-
-    async fn delete_many(
-        &self,
-        user_id: &UserId,
-        order_ids: &[String],
-    ) -> Result<usize, ApplicationError> {
-        let mut orders = self
-            .orders
-            .write()
-            .expect("in-memory order repository lock poisoned");
-        let original_len = orders.len();
-        orders.retain(|order| {
-            order.user_id != user_id.as_str() || !order_ids.iter().any(|id| id == &order.id)
-        });
-        Ok(original_len - orders.len())
-    }
-}
-
-fn should_replace(existing: &Order, incoming: &Order) -> bool {
-    match (effective_timestamp(existing), effective_timestamp(incoming)) {
-        (Some(existing), Some(incoming)) => incoming > existing,
-        (None, Some(_)) => true,
-        (Some(_), None) => false,
-        (None, None) => true,
-    }
-}
-
-fn effective_timestamp(order: &Order) -> Option<&str> {
-    order.updated_at.as_deref().or(order.created_at.as_deref())
 }

@@ -115,28 +115,28 @@ jobs:
           echo "triple=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_OUTPUT"
 
       - name: Build CLI
-        run: cargo build --locked --release -p order-wizard-cli
+        run: cargo build --locked --release -p ordercue-cli
 
       - name: Package CLI
         if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          cp target/release/order-wizard dist/order-wizard
-          tar -C dist -czf "order-wizard-${VERSION}-${{ steps.host.outputs.triple }}.tar.gz" order-wizard
+          cp target/release/ordercue dist/ordercue
+          tar -C dist -czf "ordercue-${VERSION}-${{ steps.host.outputs.triple }}.tar.gz" ordercue
 
       - name: Package CLI for Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item target/release/order-wizard.exe dist/order-wizard.exe
-          Compress-Archive -Path dist/order-wizard.exe -DestinationPath "order-wizard-$env:VERSION-${{ steps.host.outputs.triple }}.zip"
+          Copy-Item target/release/ordercue.exe dist/ordercue.exe
+          Compress-Archive -Path dist/ordercue.exe -DestinationPath "ordercue-$env:VERSION-${{ steps.host.outputs.triple }}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: cli-${{ steps.host.outputs.triple }}
-          path: order-wizard-*
+          path: ordercue-*
           if-no-files-found: error
 
   deploy:
@@ -194,3 +194,48 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: dist/*
+
+  chrome-web-store:
+    name: Upload Chrome Web Store draft
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: chrome-web-store
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.6
+
+      - name: Install dependencies
+        working-directory: apps/extension
+        run: bun install --frozen-lockfile
+
+      - name: Download release extension
+        uses: actions/download-artifact@v4
+        with:
+          name: extension
+          path: apps/extension
+
+      - name: Upload draft without submitting for review
+        working-directory: apps/extension
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          : "${CHROME_EXTENSION_ID:?Missing CHROME_EXTENSION_ID repository secret}"
+          : "${CHROME_CLIENT_ID:?Missing CHROME_CLIENT_ID repository secret}"
+          : "${CHROME_CLIENT_SECRET:?Missing CHROME_CLIENT_SECRET repository secret}"
+          : "${CHROME_REFRESH_TOKEN:?Missing CHROME_REFRESH_TOKEN repository secret}"
+          bunx --no-install wxt submit \
+            --chrome-zip "amazon-order-wizard-v${{ needs.version.outputs.version }}.zip" \
+            --chrome-skip-submit-review

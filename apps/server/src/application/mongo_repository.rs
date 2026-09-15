@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, Document, Regex},
+    bson::{doc, Bson, Regex},
     error::{ErrorKind, WriteFailure},
     options::ReturnDocument,
     Collection,
@@ -54,7 +54,7 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         user_id: &UserId,
         search: OrderSearch,
     ) -> Result<Vec<Order>, ApplicationError> {
-        let mut filter = doc! { "user_id": user_id.as_str() };
+        let mut filter = doc! { "user_id": user_id.as_str(), "deleted_at": Bson::Null };
         if let Some(status) = search.status {
             filter.insert(
                 "status",
@@ -86,7 +86,10 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         let entities: Vec<OrderEntity> = self
             .collection
             .find(filter)
-            .limit(search.limit as i64)
+            .limit(
+                i64::try_from(search.limit)
+                    .map_err(|error| ApplicationError::InvalidInput(error.to_string()))?,
+            )
             .await
             .map_err(repository_error)?
             .try_collect()
@@ -100,117 +103,61 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         user_id: &UserId,
         order: Order,
     ) -> Result<UpsertResult, ApplicationError> {
-        let incoming_timestamp = order
-            .updated_at
-            .as_deref()
-            .or(order.created_at.as_deref())
-            .unwrap_or("");
-        let comparison = if incoming_timestamp.is_empty() {
-            "$lte"
-        } else {
-            "$lt"
-        };
-        let mut timestamp_comparison = Document::new();
-        timestamp_comparison.insert(
-            comparison,
-            Bson::Array(vec![
-                Bson::Document(doc! {
-                    "$ifNull": ["$updated_at", { "$ifNull": ["$created_at", ""] }]
-                }),
-                Bson::String(incoming_timestamp.to_string()),
-            ]),
-        );
-        let filter = doc! {
-            "user_id": user_id.as_str(),
-            "order_number": &order.order_number,
-            "$expr": timestamp_comparison,
-        };
-
-        match self
-            .collection
-            .replace_one(filter, OrderEntity::from(order.clone()))
-            .upsert(true)
-            .await
-        {
-            Ok(result) => Ok(UpsertResult {
-                order,
-                applied: result.modified_count > 0 || result.upserted_id.is_some(),
-            }),
-            Err(error) if is_duplicate_key(&error) => self
+        // Parse instants in Rust, then replace only the exact snapshot we compared.
+        // The unique tenant/order-number index arbitrates concurrent first inserts.
+        let identity = doc! { "user_id": user_id.as_str(), "order_number": &order.order_number };
+        for _ in 0..64 {
+            let existing = self
                 .collection
-                .find_one(doc! {
-                    "user_id": user_id.as_str(),
-                    "order_number": &order.order_number,
-                })
+                .find_one(identity.clone())
                 .await
-                .map_err(repository_error)?
-                .map(|entity| UpsertResult {
-                    order: Order::from(entity),
-                    applied: false,
-                })
-                .ok_or_else(|| {
-                    ApplicationError::Repository(
-                        "conditional upsert conflicted but canonical order was missing".to_string(),
-                    )
-                }),
-            Err(error) => Err(repository_error(error)),
+                .map_err(repository_error)?;
+            if let Some(entity) = existing {
+                let mut filter = mongodb::bson::to_document(&entity)
+                    .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+                for field in ["note", "updated_at", "created_at", "deleted_at"] {
+                    filter.entry(field.to_string()).or_insert(Bson::Null);
+                }
+                let existing = Order::from(entity);
+                if !super::timestamps::should_replace(&existing, &order)? {
+                    return Ok(UpsertResult {
+                        order: existing,
+                        applied: false,
+                    });
+                }
+                let mut canonical = order.clone();
+                canonical.id = existing.id;
+                let result = self
+                    .collection
+                    .replace_one(filter, OrderEntity::from(canonical.clone()))
+                    .await
+                    .map_err(repository_error)?;
+                if result.matched_count > 0 {
+                    return Ok(UpsertResult {
+                        order: canonical,
+                        applied: true,
+                    });
+                }
+            } else {
+                match self
+                    .collection
+                    .insert_one(OrderEntity::from(order.clone()))
+                    .await
+                {
+                    Ok(_) => {
+                        return Ok(UpsertResult {
+                            order,
+                            applied: true,
+                        })
+                    }
+                    Err(error) if is_duplicate_key(&error) => {}
+                    Err(error) => return Err(repository_error(error)),
+                }
+            }
         }
-    }
-
-    async fn update_status(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        status: crate::models::OrderStatus,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError> {
-        self.collection
-            .find_one_and_update(
-                doc! { "user_id": user_id.as_str(), "id": order_id },
-                doc! {
-                    "$set": {
-                        "status": mongodb::bson::to_bson(&status).map_err(|error| {
-                            ApplicationError::Repository(error.to_string())
-                        })?,
-                        "updated_at": updated_at,
-                    }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .await
-            .map(|entity| entity.map(Order::from))
-            .map_err(repository_error)
-    }
-
-    async fn update_note(
-        &self,
-        user_id: &UserId,
-        order_id: &str,
-        note: &str,
-        updated_at: &str,
-    ) -> Result<Option<Order>, ApplicationError> {
-        self.collection
-            .find_one_and_update(
-                doc! { "user_id": user_id.as_str(), "id": order_id },
-                doc! {
-                    "$set": {
-                        "note": note,
-                        "updated_at": updated_at,
-                    }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .await
-            .map(|entity| entity.map(Order::from))
-            .map_err(repository_error)
-    }
-
-    async fn delete(&self, user_id: &UserId, order_id: &str) -> Result<bool, ApplicationError> {
-        self.collection
-            .delete_one(doc! { "user_id": user_id.as_str(), "id": order_id })
-            .await
-            .map(|result| result.deleted_count > 0)
-            .map_err(repository_error)
+        Err(ApplicationError::Repository(
+            "Order changed repeatedly during sync; retry the operation".into(),
+        ))
     }
 
     async fn update(
@@ -218,49 +165,37 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         user_id: &UserId,
         order_id: &str,
         update: UpdateOrder,
+        now: &str,
     ) -> Result<Option<Order>, ApplicationError> {
-        let mut fields = Document::new();
-        if let Some(status) = update.status {
-            fields.insert(
-                "status",
-                mongodb::bson::to_bson(&status)
-                    .map_err(|error| ApplicationError::Repository(error.to_string()))?,
-            );
+        let identity =
+            doc! { "user_id": user_id.as_str(), "id": order_id, "deleted_at": Bson::Null };
+        for _ in 0..64 {
+            let Some(entity) = self
+                .collection
+                .find_one(identity.clone())
+                .await
+                .map_err(repository_error)?
+            else {
+                return Ok(None);
+            };
+            let mut filter = identity.clone();
+            filter.insert("updated_at", entity.updated_at.clone());
+            filter.insert("created_at", entity.created_at.clone());
+            // Recompute the version against every new snapshot, but write only the requested fields.
+            let patch = update.at_version(&Order::from(entity), now)?;
+            let fields = mongodb::bson::to_document(&patch)
+                .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+            if let Some(updated) = self
+                .collection
+                .find_one_and_update(filter, doc! { "$set": fields })
+                .return_document(ReturnDocument::After)
+                .await
+                .map_err(repository_error)?
+            {
+                return Ok(Some(Order::from(updated)));
+            }
         }
-        if let Some(note) = update.note {
-            fields.insert("note", note);
-        }
-        if let Some(updated_at) = update.updated_at {
-            fields.insert("updated_at", updated_at);
-        }
-        if let Some(deleted_at) = update.deleted_at {
-            fields.insert("deleted_at", deleted_at);
-        }
-
-        self.collection
-            .find_one_and_update(
-                doc! { "user_id": user_id.as_str(), "id": order_id },
-                doc! { "$set": fields },
-            )
-            .return_document(ReturnDocument::After)
-            .await
-            .map(|entity| entity.map(Order::from))
-            .map_err(repository_error)
-    }
-
-    async fn delete_many(
-        &self,
-        user_id: &UserId,
-        order_ids: &[String],
-    ) -> Result<usize, ApplicationError> {
-        self.collection
-            .delete_many(doc! {
-                "user_id": user_id.as_str(),
-                "id": { "$in": order_ids },
-            })
-            .await
-            .map(|result| result.deleted_count as usize)
-            .map_err(repository_error)
+        Err(ApplicationError::Conflict)
     }
 }
 
@@ -271,6 +206,10 @@ fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
     )
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Matches Result::map_err without repeating conversion closures"
+)]
 fn repository_error(error: mongodb::error::Error) -> ApplicationError {
     ApplicationError::Repository(error.to_string())
 }

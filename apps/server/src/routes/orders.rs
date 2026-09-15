@@ -202,7 +202,8 @@ async fn get_order(
     request_body = UpdateOrderRequest,
     responses(
         (status = 200, description = "Order updated successfully"),
-        (status = 400, description = "Bad request (empty update)"),
+        (status = 400, description = "Bad request (empty update or invalid timestamp)"),
+        (status = 409, description = "Order version conflict; fetch the latest order and retry"),
         (status = 404, description = "Order not found"),
         (status = 401, description = "Unauthorized", body = AuthError)
     ),

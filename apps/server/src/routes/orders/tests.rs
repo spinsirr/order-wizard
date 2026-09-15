@@ -264,3 +264,38 @@ async fn restricted_principal_cannot_call_extension_create_route() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["code"], "INSUFFICIENT_SCOPE");
 }
+
+#[tokio::test]
+async fn stale_patch_returns_conflict_without_changing_the_order() {
+    let principal = extension_principal("alice");
+    let mut initial = order("order-a", "alice");
+    initial.updated_at = Some("2099-01-01T00:00:00.123456789Z".to_string());
+    let application = OrderApplication::new(InMemoryOrderRepository::with_orders([initial]));
+    let app: axum::Router = router()
+        .layer(Extension(application.clone()))
+        .layer(Extension(principal.clone()))
+        .into();
+    let response = app
+        .oneshot(
+            Request::patch("/orders/order-a")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"note":"stale edit","updatedAt":"2099-01-01T00:00:00.123Z"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(body["code"], "CONFLICT");
+    assert_eq!(
+        application
+            .get_order(&principal, "order-a")
+            .await
+            .unwrap()
+            .note,
+        None
+    );
+}
