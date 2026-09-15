@@ -129,9 +129,12 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         resource_uri.clone(),
         issuer.clone(),
     );
-    let mut agent_client_ids = std::env::var("OIDC_CLI_CLIENT_ID")
+    let cli_client_id = std::env::var("OIDC_CLI_CLIENT_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let mut mcp_client_ids = std::env::var("OIDC_MCP_CLIENT_IDS")
         .into_iter()
-        .chain(std::env::var("OIDC_MCP_CLIENT_IDS"))
         .flat_map(|value| {
             value
                 .split(',')
@@ -141,18 +144,22 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    agent_client_ids.sort();
-    agent_client_ids.dedup();
-    let auth_policy =
-        AuthPolicy::new(extension_client_id, resource_uri).with_agent_clients(agent_client_ids)?;
+    mcp_client_ids.sort();
+    mcp_client_ids.dedup();
+    let client_config = routes::cli_auth::ClientConfig {
+        issuer: issuer.clone(),
+        resource: resource_uri.trim_end_matches('/').to_string(),
+        cli_client_id: cli_client_id.clone(),
+        mcp_client_ids: mcp_client_ids.clone(),
+    };
+    let auth_policy = AuthPolicy::new(extension_client_id, resource_uri)
+        .with_agent_clients(cli_client_id.into_iter().chain(mcp_client_ids))?;
     let verifier = JwksVerifier::new(issuer, auth_policy);
     tracing::info!("JWT verifier initialized");
 
     let database = db::connect().await?;
     let order_application =
         OrderApplication::new(MongoOrderRepository::new(db::orders_collection(&database)));
-
-    let cors = cors_layer();
 
     let governor_config = GovernorConfigBuilder::default()
         .per_second(1)
@@ -178,7 +185,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mcp_routes = Router::new()
         .nest_service(
             "/mcp",
-            mcp::service(order_application.clone(), mcp_transport_config),
+            mcp::service(order_application, mcp_transport_config),
         )
         .layer(middleware::from_fn_with_state(verifier, auth_middleware));
 
@@ -186,20 +193,20 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .merge(public_routes)
         .merge(protected_routes)
         .split_for_parts();
-    let router = router.merge(mcp_routes);
+    let router = router
+        .merge(mcp_routes)
+        .merge(routes::cli_auth::router(client_config));
 
     let enable_swagger = std::env::var("ENABLE_SWAGGER")
         .map(|value| value == "true" || value == "1")
         .unwrap_or(false);
 
-    let app = if enable_swagger {
-        router
-            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
-            .layer(rate_limit)
-            .layer(cors)
+    let router = if enable_swagger {
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
     } else {
-        router.layer(rate_limit).layer(cors)
+        router
     };
+    let app = router.layer(rate_limit).layer(cors_layer());
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let address = format!("0.0.0.0:{port}");

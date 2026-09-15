@@ -10,10 +10,37 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Sign in, inspect saved credentials, or sign out.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
+    /// Serve the five order tools to a local MCP client over stdio.
+    Mcp,
     /// Read or update orders through the least-privilege agent API.
     Orders {
         #[command(subcommand)]
         command: OrdersCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum AuthCommand {
+    Login {
+        /// Sign in using the separate MCP client.
+        #[arg(long)]
+        mcp: bool,
+        /// Print the login URL without launching a browser.
+        #[arg(long)]
+        no_browser: bool,
+    },
+    Status {
+        #[arg(long)]
+        mcp: bool,
+    },
+    Logout {
+        #[arg(long)]
+        mcp: bool,
     },
 }
 
@@ -42,7 +69,7 @@ pub(crate) enum OrdersCommand {
     Note { id: String, note: String },
 }
 
-#[derive(Clone, Copy, Debug, Serialize, ValueEnum)]
+#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize, schemars::JsonSchema, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OrderStatus {
     Uncommented,

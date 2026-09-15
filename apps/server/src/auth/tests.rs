@@ -6,6 +6,51 @@ use axum::{body::Body, http::Request, middleware, routing::get, Router};
 use tower::ServiceExt;
 
 #[test]
+fn missing_cli_configuration_keeps_extension_auth_and_rejects_other_clients() {
+    for cli_client_id in [None, Some(String::new()), Some("   ".to_string())] {
+        let policy = AuthPolicy::new("extension-client", "https://api.orderwizard.example")
+            .with_agent_clients(cli_client_id)
+            .unwrap();
+        let mut claims = Claims {
+            sub: "user-123".to_string(),
+            email: None,
+            username: None,
+            iss: Some("https://issuer.example".to_string()),
+            aud: Some("https://api.orderwizard.example".to_string()),
+            exp: Some(1_800_000_000),
+            iat: Some(1_700_000_000),
+            token_use: Some("access".to_string()),
+            client_id: Some("extension-client".to_string()),
+            scope: Some(
+                "https://api.orderwizard.example/orders.read \
+                 https://api.orderwizard.example/orders.sync \
+                 https://api.orderwizard.example/orders.status.write \
+                 https://api.orderwizard.example/orders.note.write"
+                    .to_string(),
+            ),
+        };
+
+        assert_eq!(
+            policy.principal_for(&claims),
+            Ok(Principal::extension(UserId::new("user-123")))
+        );
+
+        for client_id in [Some("cli-client".to_string()), Some(String::new())] {
+            claims.client_id = client_id;
+            assert_eq!(
+                policy.principal_for(&claims),
+                Err("Token was issued to an unsupported client")
+            );
+        }
+        claims.client_id = None;
+        assert_eq!(
+            policy.principal_for(&claims),
+            Err("Token missing client_id")
+        );
+    }
+}
+
+#[test]
 fn cli_access_token_with_all_agent_scopes_maps_to_agent_principal() {
     let policy = AuthPolicy::new("extension-client", "https://api.ordercue.example")
         .with_agent_clients(["cli-client"])
@@ -59,6 +104,35 @@ fn registered_mcp_host_access_token_maps_to_the_same_agent_ceiling() {
     let principal = policy.principal_for(&claims).unwrap();
 
     assert_eq!(principal, Principal::agent(UserId::new("user-123")));
+}
+
+#[test]
+fn registered_mcp_client_is_limited_to_agent_capabilities() {
+    let policy = AuthPolicy::new("extension-client", "https://api.orderwizard.example")
+        .with_agent_clients(["cli-client", "mcp-client"])
+        .unwrap();
+    let claims = Claims {
+        sub: "user-123".to_string(),
+        email: None,
+        username: None,
+        iss: Some("https://issuer.example".to_string()),
+        aud: Some("https://api.orderwizard.example".to_string()),
+        exp: Some(1_800_000_000),
+        iat: Some(1_700_000_000),
+        token_use: Some("access".to_string()),
+        client_id: Some("mcp-client".to_string()),
+        scope: Some(
+            "https://api.orderwizard.example/orders.read \
+             https://api.orderwizard.example/orders.sync \
+             https://api.orderwizard.example/orders.status.write \
+             https://api.orderwizard.example/orders.note.write"
+                .to_string(),
+        ),
+    };
+    assert_eq!(
+        policy.principal_for(&claims),
+        Ok(Principal::agent(UserId::new("user-123")))
+    );
 }
 
 #[test]

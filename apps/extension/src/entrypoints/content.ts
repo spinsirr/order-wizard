@@ -1,3 +1,4 @@
+import { AMAZON_ORDER_PAGE_MATCHES } from '@/constants';
 import { initFBMarketplace } from '@/content/fbMarketplace';
 import {
   injectSaveButtons,
@@ -12,10 +13,7 @@ import { getCurrentUser } from '@/content/userResolver';
 import { initializeErrorHandlers } from '@/lib';
 
 export default defineContentScript({
-  matches: [
-    '*://*.amazon.com/gp/your-account/order-history*',
-    '*://*.amazon.com/your-orders/orders*',
-  ],
+  matches: [...AMAZON_ORDER_PAGE_MATCHES],
   runAt: 'document_idle',
   main(ctx) {
     initializeErrorHandlers();

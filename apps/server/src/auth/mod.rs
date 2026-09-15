@@ -209,7 +209,7 @@ impl AuthPolicy {
         client_ids: impl IntoIterator<Item = impl Into<String>>,
     ) -> Result<Self, &'static str> {
         for client_id in client_ids {
-            let client_id = client_id.into();
+            let client_id = client_id.into().trim().to_string();
             if client_id == self.extension_client_id {
                 return Err("Agent client IDs must be different from OIDC_CLIENT_ID");
             }

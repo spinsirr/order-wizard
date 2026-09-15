@@ -7,7 +7,9 @@ description: Inspect and update a user's OrderCue orders through the installed a
 
 Use the installed `ordercue` CLI. It is the supported agent boundary and emits JSON on stdout. Do not call MongoDB or the HTTP API directly.
 
-Before the first operation, run `ordercue --version`. If the binary is unavailable, tell the user that OrderCue CLI must be installed. If it returns `AUTH_REQUIRED`, ask the user to authenticate or configure their local installation; never ask them to paste an access token into chat.
+Before the first operation, run `ordercue --version`. If the binary is unavailable, tell the user that OrderCue CLI must be installed. If it returns `AUTH_REQUIRED`, guide the user through `ordercue auth login`; never ask them to paste an access token into chat.
+
+For Claude Code MCP, use `ordercue auth login --mcp`, then register `ordercue mcp` as a stdio server. The MCP profile is separate from the CLI profile; use `auth status --mcp` or `auth logout --mcp` to manage it. Credentials stay in the system credential store. The browser must run on the same computer as the login command.
 
 ## Commands
 

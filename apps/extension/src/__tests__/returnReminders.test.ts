@@ -6,6 +6,7 @@ import {
   RETURN_REMINDER_NOTIFICATION,
   RETURN_REMINDER_STATE_KEY,
 } from '@/background/returnReminders';
+import { orderKey } from '@/lib/orderStorage';
 import { type Order, OrderStatus } from '@/types';
 
 function order(id = 'order-1', overrides: Partial<Order> = {}): Order {
@@ -74,7 +75,17 @@ describe('background return reminders', () => {
       await checkReturnReminders(new Date(2026, 7, 1 + age));
     }
     expect(api.notifications.create).toHaveBeenCalledTimes(3);
-    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({ 'order-1': '2026-08-31:overdue' });
+    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({
+      [orderKey(order())]: '2026-08-31:overdue',
+    });
+  });
+
+  it('keeps delivery history when cloud sync replaces the local record id', async () => {
+    storage['orders'] = [order('local-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 26));
+    storage['orders'] = [order('cloud-id', { orderNumber: 'amazon-order' })];
+    await checkReturnReminders(new Date(2026, 7, 26));
+    expect(api.notifications.create).toHaveBeenCalledTimes(1);
   });
 
   it('groups orders in one notification without leaking order details', async () => {
@@ -135,7 +146,9 @@ describe('background return reminders', () => {
     await expect(checkReturnReminders(new Date(2026, 7, 26))).rejects.toThrow('Delivery failed');
     expect(storage[RETURN_REMINDER_STATE_KEY]).toBeUndefined();
     await checkReturnReminders(new Date(2026, 7, 26));
-    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({ 'order-1': '2026-08-31:warning' });
+    expect(storage[RETURN_REMINDER_STATE_KEY]).toEqual({
+      [orderKey(order())]: '2026-08-31:warning',
+    });
   });
 
   it('rearms when reimbursement is reversed or the order date is corrected', async () => {

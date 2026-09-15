@@ -1,4 +1,5 @@
 import { LAST_ORDER_USER_KEY } from '@/lib/authStorage';
+import { orderKey } from '@/lib/orderStorage';
 import { LocalStorageRepository } from '@/repositories/LocalStorageRepository';
 import type { Order } from '@/types';
 import { getReturnWarning } from '@/utils/returnWarnings';
@@ -18,7 +19,7 @@ function reminderSummary(orders: Order[], now: Date) {
     if (!warning) {
       continue;
     }
-    current[order.id] = `${warning.targetDate}:${warning.stage}`;
+    current[orderKey(order)] = `${warning.targetDate}:${warning.stage}`;
     if (warning.stage === 'overdue') {
       overdueCount += 1;
     }

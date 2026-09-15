@@ -1,10 +1,76 @@
 use serde_json::Value;
 use std::{
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
-    process::Command,
+    process::{Command, Stdio},
     thread,
 };
+
+fn exchange(input: &mut impl Write, output: &mut impl BufRead, message: &Value) -> Value {
+    writeln!(input, "{message}").unwrap();
+    input.flush().unwrap();
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    serde_json::from_str(&line).unwrap()
+}
+
+#[test]
+fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
+    let (api_url, server) = serve_once(r#"[{"id":"order-1"}]"#);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ordercue"))
+        .arg("mcp")
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "mcp-test-token")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let initialized = exchange(
+        &mut input,
+        &mut output,
+        &serde_json::json!({
+            "jsonrpc":"2.0", "id":1, "method":"initialize", "params":{
+                "protocolVersion":"2025-11-25", "capabilities":{},
+                "clientInfo":{"name":"integration-test", "version":"1"}
+            }
+        }),
+    );
+    assert_eq!(initialized["result"]["protocolVersion"], "2025-11-25");
+    writeln!(
+        input,
+        "{}",
+        serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"})
+    )
+    .unwrap();
+    let listed = exchange(
+        &mut input,
+        &mut output,
+        &serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+    );
+    assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 5);
+    let called = exchange(
+        &mut input,
+        &mut output,
+        &serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+            "name":"orders_list", "arguments":{"limit":1}
+        }}),
+    );
+    assert_ne!(called["result"]["isError"], true);
+    assert!(called["result"]["content"].to_string().contains("order-1"));
+    drop(input);
+    let mut trailing = String::new();
+    output.read_to_string(&mut trailing).unwrap();
+    assert!(trailing.is_empty());
+    assert!(child.wait().unwrap().success());
+    let request = server.join().unwrap();
+    assert!(request.starts_with("GET /agent/orders?limit=1 HTTP/1.1\r\n"));
+    assert!(request
+        .to_ascii_lowercase()
+        .contains("authorization: bearer mcp-test-token\r\n"));
+}
 
 fn serve_once(response_body: &'static str) -> (String, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();

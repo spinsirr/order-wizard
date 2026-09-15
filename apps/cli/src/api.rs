@@ -1,4 +1,8 @@
-use crate::{command::OrderStatus, CliError};
+use crate::{
+    auth::{self, Profile},
+    command::OrderStatus,
+    CliError,
+};
 use reqwest::{Client, Url};
 use serde_json::Value;
 
@@ -19,16 +23,12 @@ pub(crate) struct ApiClient {
 }
 
 impl ApiClient {
-    pub(crate) fn from_environment() -> Result<Self, CliError> {
-        let api_url = std::env::var("ORDERCUE_API_URL")
-            .map_err(|_| CliError::config("ORDERCUE_API_URL is not set"))?;
-        let access_token = std::env::var("ORDERCUE_ACCESS_TOKEN")
-            .map_err(|_| CliError::auth("ORDERCUE_ACCESS_TOKEN is not set"))?;
-        let base_url = Url::parse(&format!("{}/", api_url.trim_end_matches('/')))
-            .map_err(|error| CliError::config(format!("ORDERCUE_API_URL is invalid: {error}")))?;
+    pub(crate) async fn from_environment(profile: Profile) -> Result<Self, CliError> {
+        let base_url = auth::api_url()?;
+        let access_token = auth::access_token(profile, &base_url).await?;
 
         Ok(Self {
-            http: Client::new(),
+            http: auth::http()?,
             base_url,
             access_token,
         })

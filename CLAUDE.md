@@ -99,7 +99,8 @@ that shared layer. Status display names come from `ORDER_STATUS_LABELS`.
 ### Authentication Flow
 1. Cognito OIDC authorization code flow via oauth4webapi
 2. Authorization requests bind tokens to `RESOURCE_URI` and request custom order scopes
-3. Extension receives an access token; CLI uses a separate public app client
+3. Extension receives an access token; CLI and stdio MCP use separate public app clients
+   and system credential-store profiles. Access tokens remain in memory.
 4. Server validates RS256, issuer, expiry, `token_use=access`, resource audience, and client allowlist
 5. Final token scopes are intersected with the app client's maximum capabilities to construct `Principal`
 

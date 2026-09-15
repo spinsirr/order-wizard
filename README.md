@@ -215,17 +215,41 @@ Install from the repository:
 cargo install --git https://github.com/spinsirr/order-wizard ordercue-cli --bin ordercue
 ```
 
-The current automation seam reads `ORDERCUE_API_URL` and `ORDERCUE_ACCESS_TOKEN` from the local environment. The token must come from the CLI public app client and include the API audience plus `orders.read`, `orders.status.write`, and `orders.note.write` scopes.
+Sign in once, then use the CLI:
 
 ```bash
+ordercue auth login
+ordercue auth status
 ordercue orders list --limit 20
 ordercue orders search "wireless headphones" --status commented
 ordercue orders get <order-id>
 ordercue orders status <order-id> reimbursed
 ordercue orders note <order-id> "Follow up tomorrow"
+ordercue auth logout
 ```
 
-The paired Skill is in `skills/ordercue`. Native `auth login` remains gated on selecting and validating a production Cognito callback strategy; the AWS-documented HTTP loopback callback is testing-only.
+The default API is `https://order-wizard-api.fly.dev`; `ORDERCUE_API_URL` selects
+another installation. Refresh credentials stay in the system credential store;
+access tokens stay in memory. Linux login requires a working Secret Service
+session. Use `auth login --no-browser` to open the URL yourself on the same computer.
+For automation, `ORDERCUE_ACCESS_TOKEN` overrides saved credentials and must carry
+the API audience and the three agent order scopes. The paired Skill is in `skills/ordercue`.
+
+### Claude Code MCP
+
+```bash
+ordercue auth login --mcp
+claude mcp add --transport stdio --scope user ordercue -- ordercue mcp
+```
+
+The stdio server uses its separate MCP login from the system credential store.
+Manage it with `auth status --mcp` and `auth logout --mcp`. Register distinct Cognito
+public clients for CLI and MCP, with authorization-code grant, PKCE and the
+`orders.read`, `orders.status.write` and `orders.note.write` resource scopes.
+Both use `https://order-wizard-api.fly.dev/oauth/cli/callback`; the API relays only
+the code/error to a local listener, which verifies Host and one-time state.
+Client IDs and issuer are published at `/.well-known/order-wizard-clients`.
+Unset client IDs disable that profile; bundled MCP login requires exactly one MCP client.
 
 ## Remote MCP
 
