@@ -16,7 +16,7 @@ Frequent buyers, product testers, and small-scale resellers end up copying order
 - manual trackers go stale because every order must be re-entered;
 - giving an AI agent database or browser access grants far more authority than the task requires.
 
-OrderCue keeps capture in context, makes local data the immediate source of truth, and exposes only five narrow agent operations: list, search, detail, status, and note.
+OrderCue keeps capture in context, makes local data the immediate source of truth, and exposes six narrow agent operations: inbox, list, search, detail, status, and note.
 
 ## Take-home scope
 
@@ -74,7 +74,7 @@ The 30-day mark is an estimate from **order placement**, not Amazon's actual ret
 - automatic status inference;
 - automatic Marketplace posting;
 - order creation or deletion through the agent interface;
-- MCP resources, prompts, tasks, or tools beyond list/search/detail/status/note;
+- MCP resources, prompts, tasks, or tools beyond inbox/list/search/detail/status/note;
 - multi-store scraping and collaborative workspaces;
 - a bespoke web dashboard duplicating the extension.
 
@@ -218,13 +218,30 @@ Sign in once, then use the CLI:
 ```bash
 ordercue auth login
 ordercue auth status
+ordercue orders inbox --as-of 2026-09-16
 ordercue orders list --limit 20
 ordercue orders search "wireless headphones" --status commented
 ordercue orders get <order-id>
-ordercue orders status <order-id> reimbursed
-ordercue orders note <order-id> "Follow up tomorrow"
+ordercue orders status <order-id> reimbursed --if-version <version>
+ordercue orders note <order-id> "Follow up tomorrow" --if-version <version>
 ordercue auth logout
 ```
+
+`inbox` returns unfinished orders with suggested review, visibility, reimbursement,
+and return checks. Supply your local date with `--as-of`; return targets follow
+25/28/30 calendar-day reminders, not verified Amazon deadlines. A null
+`daysSinceOrder` means the captured date is unknown. Only cloud-synced orders are visible.
+
+List/search return `{ orders, nextCursor }`; inbox returns `{ asOf, items, nextCursor }`.
+Continue with `--after <nextCursor>` until null, keeping filters/date unchanged.
+Pages use stable order-number ordering and reflect live data, not a frozen snapshot.
+Prioritize urgent return checks after collecting the pages.
+
+Each agent order includes `version`. Pass it unchanged as `--if-version` when
+updating. A stale write returns `CONFLICT`: read again and reassess rather than
+blindly retrying. Notes replace the full text; preserve the existing text when
+adding a note. These agent contracts require the matching server and CLI release;
+the extension's sync API is unchanged.
 
 The default API is `https://order-wizard-api.fly.dev`; `ORDERCUE_API_URL` selects
 another installation. Refresh credentials stay in the system credential store;
@@ -252,15 +269,21 @@ Unset client IDs disable that profile; bundled MCP login requires exactly one MC
 
 ## Remote MCP
 
-The authenticated MCP endpoint is `POST <RESOURCE_URI>/mcp`. It supports only the stable `2026-07-28` protocol and exposes five tools:
+The authenticated MCP endpoint is `POST <RESOURCE_URI>/mcp`. It supports only the stable `2026-07-28` protocol and exposes six tools:
 
 ```text
+orders_inbox
 orders_list
 orders_search
 orders_get
 orders_set_status
 orders_set_note
 ```
+
+`orders_inbox` takes `as_of`, optional `after` and `limit` (1–100). List/search
+also accept `after`. Mutation tools require `expected_version` from the returned
+order's `version`. REST uses `GET /agent/inbox?as_of=YYYY-MM-DD` and camelCase
+`expectedVersion` on the existing status/note PATCH routes.
 
 The server is stateless: it does not create `Mcp-Session-Id` sessions or expose legacy GET/DELETE streams. Every tool call obtains the user tenant from the verified bearer token and goes through the same `OrderApplication` used by REST. Create, delete, batch mutation, and arbitrary updates are not registered as MCP tools and remain blocked by application capabilities if a caller tries to bypass discovery.
 

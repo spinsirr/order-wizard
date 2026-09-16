@@ -4,7 +4,11 @@ use futures::{stream, StreamExt, TryStreamExt};
 use std::sync::Arc;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+mod agent;
+mod inbox;
 mod mongo_repository;
+pub use agent::{AgentOrder, OrderPage};
+pub use inbox::OrderInbox;
 #[cfg(test)]
 mod test_support;
 mod timestamps;
@@ -161,6 +165,8 @@ pub struct UpsertOrder {
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct UpdateOrder {
+    #[serde(skip)]
+    pub expected_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<OrderStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -171,8 +177,10 @@ pub struct UpdateOrder {
     pub deleted_at: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct OrderSearch {
+    pub after: Option<String>,
+    pub pending_only: bool,
     pub query: Option<String>,
     pub status: Option<OrderStatus>,
     pub limit: usize,
@@ -187,6 +195,13 @@ impl UpdateOrder {
     }
 
     fn at_version(&self, existing: &Order, now: &str) -> Result<Self, ApplicationError> {
+        if self
+            .expected_version
+            .as_deref()
+            .is_some_and(|expected| expected != agent::version(existing))
+        {
+            return Err(ApplicationError::Conflict);
+        }
         let version = timestamps::for_update(existing, self.updated_at.as_deref(), now)?;
         Ok(Self {
             updated_at: Some(version.clone()),
@@ -320,29 +335,6 @@ impl OrderApplication {
             .ok_or(ApplicationError::NotFound)
     }
 
-    pub async fn search_orders(
-        &self,
-        principal: &Principal,
-        search: OrderSearch,
-    ) -> Result<Vec<Order>, ApplicationError> {
-        principal.require(Capability::ReadOrders)?;
-        if search
-            .query
-            .as_deref()
-            .is_some_and(|query| query.trim().is_empty())
-        {
-            return Err(ApplicationError::InvalidInput(
-                "Search query must not be empty".to_string(),
-            ));
-        }
-        if !(1..=100).contains(&search.limit) {
-            return Err(ApplicationError::InvalidInput(
-                "Search limit must be between 1 and 100".to_string(),
-            ));
-        }
-        self.repository.search(principal.user_id(), search).await
-    }
-
     pub async fn upsert_order(
         &self,
         principal: &Principal,
@@ -362,6 +354,7 @@ impl OrderApplication {
         principal: &Principal,
         order_id: &str,
         status: OrderStatus,
+        expected_version: String,
     ) -> Result<Order, ApplicationError> {
         principal.require(Capability::UpdateStatus)?;
         let updated_at = self.clock.now_utc();
@@ -371,6 +364,7 @@ impl OrderApplication {
                 order_id,
                 UpdateOrder {
                     status: Some(status),
+                    expected_version: Some(expected_version),
                     ..UpdateOrder::default()
                 },
                 &updated_at,
@@ -384,6 +378,7 @@ impl OrderApplication {
         principal: &Principal,
         order_id: &str,
         note: String,
+        expected_version: String,
     ) -> Result<Order, ApplicationError> {
         principal.require(Capability::UpdateNote)?;
         let updated_at = self.clock.now_utc();
@@ -393,6 +388,7 @@ impl OrderApplication {
                 order_id,
                 UpdateOrder {
                     note: Some(note),
+                    expected_version: Some(expected_version),
                     ..UpdateOrder::default()
                 },
                 &updated_at,

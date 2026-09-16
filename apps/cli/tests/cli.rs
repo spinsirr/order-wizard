@@ -16,7 +16,8 @@ fn exchange(input: &mut impl Write, output: &mut impl BufRead, message: &Value) 
 
 #[test]
 fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
-    let (api_url, server) = serve_once(r#"[{"id":"order-1"}]"#);
+    let (api_url, server) =
+        serve_once(r#"{"orders":[{"id":"order-1","version":"v1"}],"nextCursor":null}"#);
     let mut child = Command::new(env!("CARGO_BIN_EXE_ordercue"))
         .arg("mcp")
         .env("ORDERCUE_API_URL", api_url)
@@ -50,7 +51,7 @@ fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
         &mut output,
         &serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
     );
-    assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 5);
+    assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 6);
     let called = exchange(
         &mut input,
         &mut output,
@@ -73,6 +74,13 @@ fn stdio_mcp_negotiates_and_reads_orders_without_stdout_noise() {
 }
 
 fn serve_once(response_body: &'static str) -> (String, thread::JoinHandle<String>) {
+    serve_response(response_body, "200 OK")
+}
+
+fn serve_response(
+    response_body: &'static str,
+    status: &'static str,
+) -> (String, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
@@ -105,7 +113,7 @@ fn serve_once(response_body: &'static str) -> (String, thread::JoinHandle<String
         }
 
         let response = format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
             response_body.len(),
             response_body
         );
@@ -117,7 +125,7 @@ fn serve_once(response_body: &'static str) -> (String, thread::JoinHandle<String
 
 #[test]
 fn list_outputs_json_and_calls_only_the_agent_endpoint() {
-    let response = r#"[{"id":"order-1","orderNumber":"111-1111111-1111111"}]"#;
+    let response = r#"{"orders":[{"id":"order-1","orderNumber":"111-1111111-1111111","version":"v1"}],"nextCursor":null}"#;
     let (api_url, server) = serve_once(response);
 
     let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
@@ -164,7 +172,7 @@ fn get_outputs_one_order_from_the_agent_endpoint() {
 
 #[test]
 fn search_encodes_query_and_filters_on_the_agent_endpoint() {
-    let response = r#"[{"id":"order-1"}]"#;
+    let response = r#"{"orders":[{"id":"order-1","version":"v1"}],"nextCursor":null}"#;
     let (api_url, server) = serve_once(response);
 
     let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
@@ -176,6 +184,8 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
             "commented",
             "--limit",
             "10",
+            "--after",
+            "previous-number",
         ])
         .env("ORDERCUE_API_URL", api_url)
         .env("ORDERCUE_ACCESS_TOKEN", "test-token")
@@ -185,7 +195,7 @@ fn search_encodes_query_and_filters_on_the_agent_endpoint() {
     assert!(output.status.success());
     let request = server.join().unwrap();
     assert!(request.starts_with(
-        "GET /agent/orders?q=wireless+headphones&limit=10&status=commented HTTP/1.1\r\n"
+        "GET /agent/orders?q=wireless+headphones&limit=10&after=previous-number&status=commented HTTP/1.1\r\n"
     ));
 }
 
@@ -195,7 +205,14 @@ fn status_updates_only_the_status_agent_endpoint() {
     let (api_url, server) = serve_once(response);
 
     let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
-        .args(["orders", "status", "order-1", "reimbursed"])
+        .args([
+            "orders",
+            "status",
+            "order-1",
+            "reimbursed",
+            "--if-version",
+            "v1",
+        ])
         .env("ORDERCUE_API_URL", api_url)
         .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
@@ -204,7 +221,7 @@ fn status_updates_only_the_status_agent_endpoint() {
     assert!(output.status.success());
     let request = server.join().unwrap();
     assert!(request.starts_with("PATCH /agent/orders/order-1/status HTTP/1.1\r\n"));
-    assert!(request.ends_with("\r\n\r\n{\"status\":\"reimbursed\"}"));
+    assert!(request.ends_with("\r\n\r\n{\"expectedVersion\":\"v1\",\"status\":\"reimbursed\"}"));
 }
 
 #[test]
@@ -213,7 +230,14 @@ fn note_updates_only_the_note_agent_endpoint() {
     let (api_url, server) = serve_once(response);
 
     let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
-        .args(["orders", "note", "order-1", "Follow up tomorrow"])
+        .args([
+            "orders",
+            "note",
+            "order-1",
+            "Follow up tomorrow",
+            "--if-version",
+            "v1",
+        ])
         .env("ORDERCUE_API_URL", api_url)
         .env("ORDERCUE_ACCESS_TOKEN", "test-token")
         .output()
@@ -222,7 +246,9 @@ fn note_updates_only_the_note_agent_endpoint() {
     assert!(output.status.success());
     let request = server.join().unwrap();
     assert!(request.starts_with("PATCH /agent/orders/order-1/note HTTP/1.1\r\n"));
-    assert!(request.ends_with("\r\n\r\n{\"note\":\"Follow up tomorrow\"}"));
+    assert!(
+        request.ends_with("\r\n\r\n{\"expectedVersion\":\"v1\",\"note\":\"Follow up tomorrow\"}")
+    );
 }
 
 #[test]
@@ -253,4 +279,76 @@ fn missing_token_is_a_machine_readable_auth_error() {
     assert!(output.stdout.is_empty());
     let error: Value = serde_json::from_slice(&output.stderr).unwrap();
     assert_eq!(error["error"]["code"], "AUTH_REQUIRED");
+}
+
+#[test]
+fn inbox_passes_the_users_date_and_cursor_without_interpreting_them_as_url_structure() {
+    let (api_url, server) = serve_once(r#"{"items":[],"nextCursor":null,"asOf":"2026-09-16"}"#);
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
+        .args([
+            "orders",
+            "inbox",
+            "--as-of",
+            "2026-09-16",
+            "--after",
+            "123 /?",
+            "--limit",
+            "1",
+        ])
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(server
+        .join()
+        .unwrap()
+        .starts_with("GET /agent/inbox?as_of=2026-09-16&limit=1&after=123+%2F%3F HTTP/1.1\r\n"));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["nextCursor"],
+        Value::Null
+    );
+}
+
+#[test]
+fn mutations_without_a_read_version_fail_before_auth_or_network() {
+    for args in [
+        ["orders", "status", "one", "reimbursed"],
+        ["orders", "note", "one", "new note"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"]["code"], "USAGE_ERROR");
+        assert!(error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--if-version"));
+    }
+}
+
+#[test]
+fn conflict_is_machine_readable_and_never_automatically_retried() {
+    let (api_url, server) = serve_response(
+        r#"{"code":"CONFLICT","message":"Order changed"}"#,
+        "409 Conflict",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_ordercue"))
+        .args(["orders", "note", "one", "new note", "--if-version", "stale"])
+        .env("ORDERCUE_API_URL", api_url)
+        .env("ORDERCUE_ACCESS_TOKEN", "test-token")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(6));
+    assert!(output.stdout.is_empty());
+    let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(error["error"]["code"], "CONFLICT");
+    assert_eq!(error["error"]["status"], 409);
+    assert!(server
+        .join()
+        .unwrap()
+        .contains("\"expectedVersion\":\"stale\""));
 }

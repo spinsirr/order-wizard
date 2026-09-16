@@ -11,6 +11,7 @@ use tower::ServiceExt;
 use super::*;
 use crate::application::{InMemoryOrderRepository, UserId};
 use crate::auth::{auth_middleware, AuthPolicy, JwksVerifier};
+use crate::models::Order;
 
 fn order(id: &str, user_id: &str, product_name: &str) -> Order {
     Order {
@@ -64,7 +65,7 @@ fn mcp_router(orders: impl IntoIterator<Item = Order>) -> Router {
 }
 
 #[test]
-fn exposes_only_the_five_agent_safe_tools_with_structured_outputs() {
+fn exposes_only_the_six_agent_safe_tools_with_structured_outputs() {
     let server = server([]);
     let tools = OrderMcpServer::tool_router().list_all();
     let names = tools
@@ -76,6 +77,7 @@ fn exposes_only_the_five_agent_safe_tools_with_structured_outputs() {
         names,
         BTreeSet::from([
             "orders_get",
+            "orders_inbox",
             "orders_list",
             "orders_search",
             "orders_set_note",
@@ -123,13 +125,14 @@ async fn list_is_tenant_scoped_and_honors_the_limit() {
             Parameters(ListOrdersParams {
                 status: None,
                 limit: 1,
+                after: None,
             }),
         )
         .await
         .unwrap();
 
-    assert_eq!(orders.len(), 1);
-    assert_eq!(orders[0].user_id, "alice");
+    assert_eq!(orders.orders.len(), 1);
+    assert_eq!(orders.orders[0].order.user_id, "alice");
 }
 
 #[tokio::test]
@@ -142,12 +145,13 @@ async fn status_and_note_updates_use_the_same_application_boundary() {
             Parameters(SetStatusParams {
                 id: "alice-order".to_string(),
                 status: OrderStatus::Reimbursed,
+                expected_version: "2026-08-27T12:00:00Z".into(),
             }),
         )
         .await
         .unwrap();
-    assert_eq!(updated_status.status, OrderStatus::Reimbursed);
-    assert!(updated_status.updated_at.is_some());
+    assert_eq!(updated_status.order.status, OrderStatus::Reimbursed);
+    assert!(updated_status.order.updated_at.is_some());
 
     let Json(updated_note) = server
         .set_note(
@@ -155,11 +159,15 @@ async fn status_and_note_updates_use_the_same_application_boundary() {
             Parameters(SetNoteParams {
                 id: "alice-order".to_string(),
                 note: "Follow up tomorrow".to_string(),
+                expected_version: updated_status.version.clone(),
             }),
         )
         .await
         .unwrap();
-    assert_eq!(updated_note.note.as_deref(), Some("Follow up tomorrow"));
+    assert_eq!(
+        updated_note.order.note.as_deref(),
+        Some("Follow up tomorrow")
+    );
 }
 
 #[tokio::test]
@@ -182,6 +190,52 @@ async fn missing_principal_is_a_tool_error_not_an_authority_escalation() {
     assert_eq!(error.is_error, Some(true));
     let message = error.content[0].as_text().unwrap().text.as_str();
     assert!(message.contains("AUTH_REQUIRED"));
+}
+
+#[tokio::test]
+async fn inbox_and_conflicts_are_structured_mcp_results() {
+    let server = server([
+        order("one", "alice", "Product"),
+        order("private", "bob", "Private"),
+    ]);
+    let Json(inbox) = server
+        .inbox(
+            McpExtension(authenticated_parts("alice")),
+            Parameters(InboxParams {
+                as_of: "2026-09-24".into(),
+                after: None,
+                limit: 50,
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(inbox.items.len(), 1);
+    assert_eq!(
+        inbox.items[0].return_check.as_ref().unwrap().stage,
+        "urgent"
+    );
+    let result = server
+        .set_note(
+            McpExtension(authenticated_parts("alice")),
+            Parameters(SetNoteParams {
+                id: "one".into(),
+                note: "stale".into(),
+                expected_version: "stale".into(),
+            }),
+        )
+        .await;
+    let Err(error) = result else {
+        panic!("stale MCP write must fail");
+    };
+    assert_eq!(error.is_error, Some(true));
+    assert!(error.content[0]
+        .as_text()
+        .unwrap()
+        .text
+        .contains("CONFLICT"));
+    assert!(
+        serde_json::from_value::<SetNoteParams>(json!({"id":"one", "note":"no version"})).is_err()
+    );
 }
 
 #[test]
@@ -239,6 +293,7 @@ async fn streamable_http_lists_only_safe_tools_without_a_session() {
         ordered_names,
         vec![
             "orders_get",
+            "orders_inbox",
             "orders_list",
             "orders_search",
             "orders_set_note",

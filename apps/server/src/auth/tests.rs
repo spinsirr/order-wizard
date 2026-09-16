@@ -215,7 +215,12 @@ async fn cli_scopes_become_operation_level_capabilities() {
     assert!(application.list_orders(&principal).await.is_ok());
     assert!(matches!(
         application
-            .update_note(&principal, "order-1", "forbidden".to_string())
+            .update_note(
+                &principal,
+                "order-1",
+                "forbidden".to_string(),
+                "unversioned".into()
+            )
             .await,
         Err(ApplicationError::Forbidden)
     ));

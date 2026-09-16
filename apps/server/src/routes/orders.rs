@@ -230,6 +230,7 @@ async fn update_order(
                 note: payload.note,
                 updated_at: payload.updated_at,
                 deleted_at: payload.deleted_at,
+                ..UpdateOrder::default()
             },
         )
         .await?;

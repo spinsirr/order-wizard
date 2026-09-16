@@ -42,7 +42,11 @@ impl CliError {
     pub(crate) fn api(status: u16, details: Value) -> Self {
         Self {
             error: ErrorBody {
-                code: "API_ERROR",
+                code: if status == 409 {
+                    "CONFLICT"
+                } else {
+                    "API_ERROR"
+                },
                 message: format!("OrderCue API returned HTTP {status}"),
                 status: Some(status),
                 details: Some(Box::new(details)),

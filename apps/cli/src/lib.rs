@@ -33,15 +33,37 @@ pub async fn execute(cli: Cli) -> Result<Value, CliError> {
         Command::Orders { command } => {
             let client = ApiClient::from_environment(Profile::Cli).await?;
             match command {
-                OrdersCommand::List { status, limit } => client.list_orders(status, limit).await,
-                OrdersCommand::Search {
-                    query,
+                OrdersCommand::Inbox {
+                    as_of,
+                    after,
+                    limit,
+                } => client.inbox(&as_of, limit, after.as_deref()).await,
+                OrdersCommand::List {
                     status,
                     limit,
-                } => client.search_orders(&query, status, limit).await,
+                    after,
+                } => client.list_orders(status, limit, after.as_deref()).await,
+                OrdersCommand::Search {
+                    query,
+                    after,
+                    status,
+                    limit,
+                } => {
+                    client
+                        .search_orders(&query, status, limit, after.as_deref())
+                        .await
+                }
                 OrdersCommand::Get { id } => client.get_order(&id).await,
-                OrdersCommand::Status { id, status } => client.update_status(&id, status).await,
-                OrdersCommand::Note { id, note } => client.update_note(&id, &note).await,
+                OrdersCommand::Status {
+                    id,
+                    status,
+                    if_version,
+                } => client.update_status(&id, status, &if_version).await,
+                OrdersCommand::Note {
+                    id,
+                    note,
+                    if_version,
+                } => client.update_note(&id, &note, &if_version).await,
             }
         }
     }

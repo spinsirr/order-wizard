@@ -1,0 +1,212 @@
+[
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-25",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-28",
+    "stage": "warning",
+    "daysRemaining": 3,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-29",
+    "stage": "urgent",
+    "daysRemaining": 2,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-30",
+    "stage": "urgent",
+    "daysRemaining": 1,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-08-31",
+    "stage": "overdue",
+    "daysRemaining": 0,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "August 1, 2026",
+    "asOf": "2026-09-01",
+    "stage": "overdue",
+    "daysRemaining": -1,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "Aug 1, 2026",
+    "asOf": "2026-08-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "1 August 2026",
+    "asOf": "2026-08-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "2026-08-01",
+    "asOf": "2026-08-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "2026-08-01T23:30:00-07:00",
+    "asOf": "2026-08-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-08-31"
+  },
+  {
+    "orderDate": "Sep. 1, 2026",
+    "asOf": "2026-09-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-10-01"
+  },
+  {
+    "orderDate": "1 Sept 2026",
+    "asOf": "2026-09-26",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-10-01"
+  },
+  {
+    "orderDate": "",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "invalid",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "02/03/2026",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "February 30, 2026",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2026-02-29",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2026-13-01",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2026-01-32",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2026-08-01Tinvalid",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "Aug 0, 2026",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2027-01-01",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "2024-02-29",
+    "asOf": "2024-03-25",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2024-03-30"
+  },
+  {
+    "orderDate": "2025-12-20",
+    "asOf": "2026-01-14",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-01-19"
+  },
+  {
+    "orderDate": "2026-02-15",
+    "asOf": "2026-03-12",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-03-17"
+  },
+  {
+    "orderDate": "2026-10-10",
+    "asOf": "2026-11-04",
+    "stage": "warning",
+    "daysRemaining": 5,
+    "targetDate": "2026-11-09"
+  },
+  {
+    "orderDate": "August 1, 26",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "Aug,1,2026",
+    "asOf": "2026-09-01",
+    "stage": null,
+    "daysRemaining": null,
+    "targetDate": null
+  },
+  {
+    "orderDate": "1 Aug. 2026",
+    "asOf": "2026-09-01",
+    "stage": "overdue",
+    "daysRemaining": -1,
+    "targetDate": "2026-08-31"
+  }
+]
