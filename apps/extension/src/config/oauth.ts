@@ -55,7 +55,6 @@ export function createAuthorizationUrl(input: AuthorizationUrlInput): URL {
   authUrl.searchParams.set('state', input.state);
   authUrl.searchParams.set('code_challenge', input.codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
-  authUrl.searchParams.set('prompt', 'login');
 
   return authUrl;
 }
