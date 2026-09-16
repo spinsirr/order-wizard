@@ -17,6 +17,7 @@ describe('Cognito authorization URL', () => {
 
     expect(url.origin).toBe('https://us-west-1omca6h5mu.auth.us-west-1.amazoncognito.com');
     expect(url.searchParams.get('client_id')).toBe('2g61sgjultqdm7n9j2lusopfpd');
+    expect(url.searchParams.has('prompt')).toBe(false);
     expect(url.searchParams.get('redirect_uri')).toBe(
       'https://kfohphllanmaojigofaoedibjbcdlhmj.chromiumapp.org/',
     );
