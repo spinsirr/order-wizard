@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use super::{
     ApplicationError, OrderSearch, TenantScopedOrderRepository, UpdateOrder, UpsertResult, UserId,
 };
-use crate::models::Order;
+use crate::models::{Order, OrderStatus};
 
 pub(crate) struct InMemoryOrderRepository {
     orders: RwLock<Vec<Order>>,
@@ -61,7 +61,7 @@ impl TenantScopedOrderRepository for InMemoryOrderRepository {
             .orders
             .read()
             .expect("in-memory order repository lock poisoned");
-        Ok(orders
+        let mut matching: Vec<_> = orders
             .iter()
             .filter(|order| order.user_id == user_id.as_str() && order.deleted_at.is_none())
             .filter(|order| {
@@ -81,9 +81,18 @@ impl TenantScopedOrderRepository for InMemoryOrderRepository {
                             .is_some_and(|note| note.to_lowercase().contains(query))
                 })
             })
-            .take(search.limit)
+            .filter(|order| !search.pending_only || order.status != OrderStatus::Reimbursed)
+            .filter(|order| {
+                search
+                    .after
+                    .as_ref()
+                    .is_none_or(|after| &order.order_number > after)
+            })
             .cloned()
-            .collect())
+            .collect();
+        matching.sort_by(|a, b| a.order_number.cmp(&b.order_number));
+        matching.truncate(search.limit);
+        Ok(matching)
     }
 
     async fn upsert_if_newer(

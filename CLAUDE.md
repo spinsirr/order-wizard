@@ -131,6 +131,14 @@ that shared layer. Status display names come from `ORDER_STATUS_LABELS`.
 - `apps/server/src/lib.rs` composes Axum, auth, CORS and rate limiting; `main.rs`
   starts the server. `routes` owns REST/OAuth discovery and `mcp` owns MCP transport.
 
+Agent reads return a `version` token. Agent status/note writes must supply that
+exact token; the repository checks it inside every CAS attempt. The extension's
+replication timestamps remain separate from this read precondition. Agent list,
+search and inbox use order-number cursors on the existing tenant/order index.
+`orders_inbox` calculates pending checks for an explicit local calendar date;
+`test-fixtures/return-warnings.json` keeps server and extension reminder behavior
+aligned. Keep business logic in `OrderApplication`, shared by REST and both MCP paths.
+
 ### Replication contract
 
 Orders are offline first in `chrome.storage.local`; MongoDB is the shared replica.

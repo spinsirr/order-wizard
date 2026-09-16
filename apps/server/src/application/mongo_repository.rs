@@ -55,6 +55,12 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         search: OrderSearch,
     ) -> Result<Vec<Order>, ApplicationError> {
         let mut filter = doc! { "user_id": user_id.as_str(), "deleted_at": Bson::Null };
+        if let Some(after) = &search.after {
+            filter.insert("order_number", doc! { "$gt": after });
+        }
+        if search.pending_only {
+            filter.insert("status", doc! { "$ne": "reimbursed" });
+        }
         if let Some(status) = search.status {
             filter.insert(
                 "status",
@@ -86,6 +92,7 @@ impl TenantScopedOrderRepository for MongoOrderRepository {
         let entities: Vec<OrderEntity> = self
             .collection
             .find(filter)
+            .sort(doc! { "order_number": 1 })
             .limit(
                 i64::try_from(search.limit)
                     .map_err(|error| ApplicationError::InvalidInput(error.to_string()))?,

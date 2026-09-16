@@ -7,12 +7,16 @@ use reqwest::{Client, Url};
 use serde_json::Value;
 
 #[derive(serde::Serialize)]
-struct StatusUpdate {
+#[serde(rename_all = "camelCase")]
+struct StatusUpdate<'a> {
+    expected_version: &'a str,
     status: OrderStatus,
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct NoteUpdate<'a> {
+    expected_version: &'a str,
     note: &'a str,
 }
 
@@ -38,8 +42,9 @@ impl ApiClient {
         &self,
         status: Option<OrderStatus>,
         limit: u8,
+        after: Option<&str>,
     ) -> Result<Value, CliError> {
-        self.search(None, status, limit).await
+        self.search(None, status, limit, after).await
     }
 
     pub(crate) async fn search_orders(
@@ -47,8 +52,9 @@ impl ApiClient {
         query: &str,
         status: Option<OrderStatus>,
         limit: u8,
+        after: Option<&str>,
     ) -> Result<Value, CliError> {
-        self.search(Some(query), status, limit).await
+        self.search(Some(query), status, limit, after).await
     }
 
     async fn search(
@@ -56,6 +62,7 @@ impl ApiClient {
         query: Option<&str>,
         status: Option<OrderStatus>,
         limit: u8,
+        after: Option<&str>,
     ) -> Result<Value, CliError> {
         let mut url = self.endpoint("agent/orders")?;
         {
@@ -64,8 +71,30 @@ impl ApiClient {
                 query_pairs.append_pair("q", query);
             }
             query_pairs.append_pair("limit", &limit.to_string());
+            if let Some(after) = after {
+                query_pairs.append_pair("after", after);
+            }
             if let Some(status) = status {
                 query_pairs.append_pair("status", status.as_str());
+            }
+        }
+        self.send(self.http.get(url)).await
+    }
+
+    pub(crate) async fn inbox(
+        &self,
+        as_of: &str,
+        limit: u8,
+        after: Option<&str>,
+    ) -> Result<Value, CliError> {
+        let mut url = self.endpoint("agent/inbox")?;
+        {
+            let mut pairs = url.query_pairs_mut();
+            pairs
+                .append_pair("as_of", as_of)
+                .append_pair("limit", &limit.to_string());
+            if let Some(after) = after {
+                pairs.append_pair("after", after);
             }
         }
         self.send(self.http.get(url)).await
@@ -80,16 +109,28 @@ impl ApiClient {
         &self,
         id: &str,
         status: OrderStatus,
+        expected_version: &str,
     ) -> Result<Value, CliError> {
         let url = self.order_operation_endpoint(id, "status")?;
-        self.send(self.http.patch(url).json(&StatusUpdate { status }))
-            .await
+        self.send(self.http.patch(url).json(&StatusUpdate {
+            expected_version,
+            status,
+        }))
+        .await
     }
 
-    pub(crate) async fn update_note(&self, id: &str, note: &str) -> Result<Value, CliError> {
+    pub(crate) async fn update_note(
+        &self,
+        id: &str,
+        note: &str,
+        expected_version: &str,
+    ) -> Result<Value, CliError> {
         let url = self.order_operation_endpoint(id, "note")?;
-        self.send(self.http.patch(url).json(&NoteUpdate { note }))
-            .await
+        self.send(self.http.patch(url).json(&NoteUpdate {
+            expected_version,
+            note,
+        }))
+        .await
     }
 
     fn endpoint(&self, path: &str) -> Result<Url, CliError> {
