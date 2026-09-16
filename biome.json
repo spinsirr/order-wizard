@@ -61,9 +61,7 @@
       "!!**/.wxt",
       "!!**/.output",
       "!!**/storybook-static",
-      "!!**/target",
-      "!!.pnpm-store",
-      "!!docs/architecture/*.svg"
+      "!!**/target"
     ],
     "ignoreUnknown": true
   },

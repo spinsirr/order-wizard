@@ -10,7 +10,6 @@
     "typecheck:storybook": "wxt prepare && tsc --noEmit -p tsconfig.storybook.json",
     "build": "wxt build",
     "build:demo": "NODE_ENV=production wxt build --mode demo --filter-entrypoint demo",
-    "build:local": "wxt build && rm -rf /mnt/c/ordercue-ext && cp -r .output/chrome-mv3 /mnt/c/ordercue-ext",
     "zip": "wxt zip",
     "lint": "biome check ../.. --error-on-warnings",
     "lint:fix": "biome check ../.. --write --error-on-warnings",
@@ -19,7 +18,7 @@
     "typecheck": "wxt prepare && tsc --noEmit && tsc --noEmit -p tsconfig.storybook.json && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p ../../tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf .output dist",
+    "clean": "rm -rf .output .wxt storybook-static dist",
     "format:check": "biome format ../.."
   },
   "dependencies": {
