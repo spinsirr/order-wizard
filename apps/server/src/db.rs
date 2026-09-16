@@ -20,7 +20,7 @@ pub fn orders_collection(database: &Database) -> Collection<OrderEntity> {
     database.collection("orders")
 }
 
-/// Also runs for databases provisioned outside docker-compose.
+/// Ensure indexes on application startup for both new and existing databases.
 pub(crate) async fn ensure_order_indexes(
     collection: &Collection<OrderEntity>,
 ) -> Result<(), mongodb::error::Error> {

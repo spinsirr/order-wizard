@@ -86,8 +86,6 @@ AI tools were used to accelerate implementation, test generation, adversarial re
 
 The most useful AI contribution was breadth: it could inspect the extension, Rust API, CLI, and release path and surface edge cases such as hidden selections, undiscoverable note saves, and a demo page accidentally depending on extension-only browser APIs. The human work was deciding which findings mattered and which technically possible features did not belong.
 
-See [`docs/take-home-presentation.md`](./docs/take-home-presentation.md) for the submission blurb and 20-minute demo outline.
-
 ## Architecture
 
 ### Monorepo Structure
@@ -232,6 +230,7 @@ The default API is `https://order-wizard-api.fly.dev`; `ORDERCUE_API_URL` select
 another installation. Refresh credentials stay in the system credential store;
 access tokens stay in memory. Linux login requires a working Secret Service
 session. Use `auth login --no-browser` to open the URL yourself on the same computer.
+Logout revokes refresh credentials; already-issued access tokens remain valid until expiry.
 For automation, `ORDERCUE_ACCESS_TOKEN` overrides saved credentials and must carry
 the API audience and the three agent order scopes. The paired Skill is in `skills/ordercue`.
 

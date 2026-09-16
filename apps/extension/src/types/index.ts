@@ -19,15 +19,6 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 
 export type Order = z.infer<typeof OrderSchema>;
 
-// User interface
-export interface User {
-  id: string;
-  email?: string;
-  name?: string;
-  avatarUrl?: string;
-  createdAt: Date;
-}
-
 // Authenticated user with tokens
 export interface AuthUser {
   sub: string;
