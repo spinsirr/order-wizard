@@ -44,47 +44,18 @@ jobs:
         working-directory: apps/extension
         run: bun install --frozen-lockfile
 
-      - name: Check version consistency
-        run: bun scripts/set-version.ts --check
-
-      - name: Extension typecheck
-        working-directory: apps/extension
-        run: bun run typecheck
-
-      - name: Extension lint
-        working-directory: apps/extension
-        run: bun run lint
-
-      - name: Extension design conventions
-        working-directory: apps/extension
-        run: bun run check:design
-
-      - name: Extension tests
-        working-directory: apps/extension
-        run: bun run test
+      - name: Checks
+        run: bun run check
 
       - name: Extension build
         working-directory: apps/extension
         run: bun run build
 
-      - name: Demo build
-        working-directory: apps/extension
-        run: bun run build:demo
-
       - name: Storybook build
         working-directory: apps/extension
         run: bun run build-storybook
 
-      - name: Rust format
-        run: cargo fmt --all --check
-
-      - name: Rust lint
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      - name: Rust tests
-        run: cargo test --workspace --locked
-
       - name: MongoDB replication regression
         env:
           MONGODB_TEST_URI: mongodb://127.0.0.1:27017
-        run: cargo test -p server --lib mongo_replication --locked -- --ignored
+        run: bun run test:mongo

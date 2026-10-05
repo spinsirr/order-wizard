@@ -4,12 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "dev:workflow": "node scripts/dev-workflow.mjs",
     "storybook": "storybook dev --host 127.0.0.1 --port 6006 --exact-port --no-open --disable-telemetry",
     "build-storybook": "storybook build --disable-telemetry",
     "typecheck:storybook": "wxt prepare && tsc --noEmit -p tsconfig.storybook.json",
     "build": "wxt build",
-    "build:demo": "NODE_ENV=production wxt build --mode demo --filter-entrypoint demo",
     "zip": "wxt zip",
     "lint": "biome check ../.. --error-on-warnings",
     "lint:fix": "biome check ../.. --write --error-on-warnings",

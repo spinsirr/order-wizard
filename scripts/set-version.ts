@@ -39,7 +39,7 @@ if (check) {
     versions.some((version) => version !== packageJson.version)
   ) {
     throw new Error(
-      'Release versions disagree. Run just bump <version>, then stage the intended files.',
+      'Release versions disagree. Run bun run bump <version>, then stage the intended files.',
     );
   }
   console.info(`Release versions match: ${packageJson.version}`);

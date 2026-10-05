@@ -4,4 +4,4 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 # Validate the commit's versions without rewriting or staging the user's files.
 bun scripts/set-version.ts --check-staged
-just check
+bun run check
