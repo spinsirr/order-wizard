@@ -13,7 +13,6 @@ storybook-static/
 
 # Turborepo
 .turbo/
-.vercel/
 
 # Environment files
 .env

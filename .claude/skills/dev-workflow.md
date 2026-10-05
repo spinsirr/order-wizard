@@ -10,7 +10,6 @@ Follow AGENTS.md and CLAUDE.md. `/ship` is disabled; independent review is not a
 - `just dev`: local MongoDB, extension dev server and Rust API.
 - `just check`: TypeScript, lint/format, design guard, business tests and Rust checks.
 - `just build`: extension and Rust server/CLI builds; no production deployment.
-- `bun run dev:workflow` in `apps/extension`: isolated full frontend demo on port 3001.
 - `bun run storybook`: interactive UI workbench on port 6006.
 - `bun run build-storybook`: validate workbench compilation.
 - `MONGODB_TEST_URI=... just test-mongo`: real adapter regression on disposable MongoDB.

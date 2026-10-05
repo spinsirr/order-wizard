@@ -4,7 +4,7 @@
 > Canonical source: `apps/extension/DESIGN.md`
 > Last decision review: 2026-08-27
 
-This document is the binding UI contract for the extension, its settings page, and the browser-safe demo.
+This document is the binding UI contract for the extension and its settings page.
 
 ## Source of truth
 
@@ -19,7 +19,7 @@ This document is the binding UI contract for the extension, its settings page, a
 
 ## Product and information architecture
 
-OrderCue is a compact, local-first work queue for Amazon orders. The primary workflow is one vertically scrolling side panel: search or filter, inspect an order, change its status or note, then export or delete deliberately. Settings is a separate full-page form for Marketplace defaults. The Vercel demo renders the real side-panel workflow with browser-local sample data.
+OrderCue is a compact, local-first work queue for Amazon orders. The primary workflow is one vertically scrolling side panel: search or filter, inspect an order, change its status or note, then export or delete deliberately. Settings is a separate full-page form for Marketplace defaults.
 
 The complete workflow must remain usable from 320px to 480px. At narrow widths, controls wrap or scroll horizontally; actions may not disappear into hover-only affordances.
 
@@ -62,13 +62,12 @@ Feature React code must not render raw `button`, `input`, `select`, `textarea`, 
 ## Workflow states
 
 - Loading uses `Skeleton` and preserves the final list rhythm.
-- Empty collection explains how to save the first order; the demo may restore sample data.
+- Empty collection explains how to save the first order.
 - Empty search keeps filters visible and offers a clear-search action.
-- Local-only and demo state use `Alert`; destructive failures use its destructive variant.
+- Local-only state uses `Alert`; destructive failures use its destructive variant.
 - Selection remains visible through `Checkbox`, card border, and focus ring.
 - Clicking a card's non-interactive surface toggles selection. Opening Amazon remains an explicit external-link action so navigation never competes with selection.
 - Deletion always uses `AlertDialog`; focus trapping, Escape handling, and focus return belong to Radix.
-- Disabled extension-only actions remain visible in the demo with an accessible explanation.
 
 ## Accessibility
 
@@ -85,7 +84,7 @@ Feature React code must not render raw `button`, `input`, `select`, `textarea`, 
 - `bun run check:design` verifies product-specific tokens and controls; CI and `just check` run both.
 - The guard verifies the canonical registry/configuration, required shadcn primitives, and the absence of raw controls in feature React code.
 - The guard rejects unregistered typography sizes across feature code, entry points, settings, and shared UI.
-- React feature code, including content-script modals and demos, uses `components/ui`. Only DOM injection into host-owned markup is exempt.
+- React feature code, including content-script modals, uses `components/ui`. Only DOM injection into host-owned markup is exempt.
 - Marketplace preview uses the shared shadcn `Dialog` inside WXT's iframe UI so host styles cannot override controls. The host adapter owns mounting and returning focus to its Amazon trigger; Radix owns focus and keyboard behavior inside the frame.
 - Business components import shared UI; Radix imports belong in `components/ui`.
 - Status selection, filtering, and exports read labels from `ORDER_STATUS_LABELS`.
@@ -94,6 +93,6 @@ Feature React code must not render raw `button`, `input`, `select`, `textarea`, 
 
 | Date | Decision | Reason | Supersedes |
 | --- | --- | --- | --- |
-| 2026-08-27 | Geist/Vercel monochrome is the canonical visual direction. | Matches the browser demo and compact operational workflow. | Warm paper/green exploration. |
+| 2026-08-27 | Geist/Vercel monochrome is the canonical visual direction. | Matches the compact operational workflow. | Warm paper/green exploration. |
 | 2026-08-27 | Official shadcn components backed by unified `radix-ui` own all React controls and overlays. | Avoids hand-built interaction behavior and keeps accessibility in established primitives. | Feature-local buttons, inputs, selects, menus, and modal. |
 | 2026-08-27 | Five semantic type roles (10, 12, 14, 16, and 20px) are the complete extension scale. | Removes one-off 9, 11, 13, 18, and 24px choices while preserving compact metadata and readable body copy. | Ad hoc Tailwind and arbitrary font sizes. |

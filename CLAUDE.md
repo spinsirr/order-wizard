@@ -80,9 +80,6 @@ Names do not imply reimbursement or other side effects. Invalid drafts remain ed
 and unreachable states or non-final dead ends are flagged. This is an in-memory design
 experiment, not the production order schema.
 
-The full frontend runs with `bun run dev:workflow` at
-`http://127.0.0.1:3001/src/entrypoints/demo/index.html`; its navigation links to Storybook.
-`bun run build:demo` builds the Vercel preview; extension builds exclude the demo and its mocks.
 `Marketplace/Preview` renders the actual listing dialog with mock data. In the extension,
 WXT mounts `listing-preview.html` in an isolated iframe; a private MessageChannel carries
 the draft and confirmed result. Business React imports `components/ui`; Radix stays inside
@@ -107,7 +104,7 @@ that shared layer. Status display names come from `ORDER_STATUS_LABELS`.
 ### Canonical boundaries
 
 - `apps/extension/src/entrypoints` contains WXT background, content, sidepanel,
-  options, listing-preview and demo entrypoints. Configure the manifest in
+  options and listing-preview entrypoints. Configure the manifest in
   `wxt.config.ts`; do not edit generated manifests.
 - `schemas/order.ts` is the Order contract. API adapters derive their wire schemas
   from it; normalize transport nulls at the boundary. IDs are opaque strings;

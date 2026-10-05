@@ -67,10 +67,6 @@ jobs:
         working-directory: apps/extension
         run: bun run build
 
-      - name: Demo build
-        working-directory: apps/extension
-        run: bun run build:demo
-
       - name: Storybook build
         working-directory: apps/extension
         run: bun run build-storybook
