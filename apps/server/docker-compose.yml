@@ -1,16 +1,8 @@
-services:
-  server:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
-    env_file:
-      - ./apps/server/.env.production
-    ports:
-      - "8080:8080"
-    depends_on:
-      - mongodb
-    restart: unless-stopped
+# Local MongoDB for server development. The Fly deployment builds ./Dockerfile instead.
+# The project name keeps the volume created by the former root compose file.
+name: order-wizard
 
+services:
   mongodb:
     image: mongo:8.2
     ports:

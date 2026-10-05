@@ -7,12 +7,13 @@ description: OrderCue local development and validation commands.
 
 Follow AGENTS.md and CLAUDE.md. `/ship` is disabled; independent review is not automatic.
 
-- `just dev`: local MongoDB, extension dev server and Rust API.
-- `just check`: TypeScript, lint/format, design guard, business tests and Rust checks.
-- `just build`: extension and Rust server/CLI builds; no production deployment.
+- `bun run db`: local MongoDB for server work (Docker, `apps/server/docker-compose.yml`).
+- `bun run dev`: extension dev server and Rust API against `MONGODB_URI` in `apps/server/.env`.
+- `bun run check`: TypeScript, lint/format, design guard, business tests and Rust checks.
+- `bun run build`: extension and Rust server/CLI builds; no production deployment.
 - `bun run storybook`: interactive UI workbench on port 6006.
 - `bun run build-storybook`: validate workbench compilation.
-- `MONGODB_TEST_URI=... just test-mongo`: real adapter regression on disposable MongoDB.
+- `MONGODB_TEST_URI=... bun run test:mongo`: real adapter regression on disposable MongoDB.
 
 Configure extension matches, permissions and manifest metadata in `wxt.config.ts` and
 WXT entrypoints, not a generated manifest. Reload the built unpacked extension from

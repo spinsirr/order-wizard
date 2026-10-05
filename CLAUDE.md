@@ -11,33 +11,32 @@ OrderCue - A browser extension for tracking Amazon orders with cloud sync suppor
 ## Commands
 
 ```bash
-# Run `just` to see all available commands
+# Root package.json scripts; always use `bun run <script>` (`bun test`/`bun build`
+# are Bun's own test runner and bundler, not these scripts)
 
 # Development
-just dev          # Start MongoDB + extension dev server + Rust server
-just stop         # Kill all dev processes
+bun run dev        # Start extension dev server + Rust server (Ctrl-C stops)
 
 # Build
-just build        # Build extension + Rust server and CLI
+bun run build      # Build extension + Rust server and CLI
 
 # Code Quality
-just check        # Run TypeScript and Rust checks/tests
-just ci           # Alias for check
-just typecheck    # TypeScript check
-just test         # Vitest + Rust tests
-just lint         # Biome lint
-just lint-fix     # Biome lint with auto-fix
-just format       # Biome format
+bun run check      # Run TypeScript and Rust checks/tests (scripts/check.ts)
+bun run typecheck  # TypeScript check
+bun run test       # Vitest + Rust tests
+bun run lint       # Biome lint
+bun run lint:fix   # Biome lint with auto-fix
+bun run format     # Biome + rustfmt format
 
-# Database
-just db           # Start MongoDB via docker-compose
-just db-stop      # Stop MongoDB
+# Database (server development only; extension work needs no Docker)
+bun run db         # Start MongoDB from apps/server/docker-compose.yml
+bun run db:stop    # Stop MongoDB
 
 # Other
-just install      # Install dependencies
-just setup        # Setup git hooks
-just clean        # Clean all build artifacts
-just bump X.Y.Z   # Synchronize release versions and refresh Cargo.lock
+bun install        # Install dependencies
+bun run setup      # Setup git hooks
+bun run clean      # Clean all build artifacts
+bun run bump X.Y.Z # Synchronize release versions and refresh Cargo.lock
 ```
 
 ## Architecture
@@ -65,7 +64,7 @@ Tests use Vitest, Testing Library and jsdom. Run `bun run test` or
 `bun run test:watch` inside `apps/extension`. Node.js 24.5+ is required: the test
 environment uses native Web Locks from `node:worker_threads` and the existing
 `@webext-core/fake-browser` package for extension APIs. Tests inherit the strict
-TypeScript rules through `tsconfig.test.json` and are included in `just check`
+TypeScript rules through `tsconfig.test.json` and are included in `bun run check`
 and CI. In Storybook, inspect Orders/Card (including note Controls while editing),
 Orders/List (search and return queue states), and Marketplace/Preview (editing,
 photo selection, no photos and Escape). Storybook remains the interactive UI workbench.
@@ -174,14 +173,14 @@ Custom state machines are a Storybook prototype, not a production schema migrati
 
 ## Validation and releases
 
-`just check` runs version consistency, all TypeScript checks, Biome, design guards,
+`bun run check` runs version consistency, all TypeScript checks, Biome, design guards,
 business Vitest, Rust fmt/Clippy and Rust tests. CI additionally builds extension and
 Storybook and runs ignored Mongo regression tests against MongoDB 8.2.
 
-Use `MONGODB_TEST_URI=mongodb://127.0.0.1:27017 just test-mongo` only with a disposable
+Use `MONGODB_TEST_URI=mongodb://127.0.0.1:27017 bun run test:mongo` only with a disposable
 local test instance. Tests create isolated collections and remove them afterwards.
 
-`scripts/set-version.ts` is the sole version writer. `just bump X.Y.Z` updates root
+`scripts/set-version.ts` is the sole version writer. `bun run bump X.Y.Z` updates root
 package.json, Cargo workspace version and Cargo.lock. WXT reads the root version.
 Pre-commit validates staged versions and runs checks without rewriting or staging.
 Release tags must match versions and point to main; never move existing tags.

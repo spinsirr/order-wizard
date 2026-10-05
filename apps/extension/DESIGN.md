@@ -81,7 +81,7 @@ Feature React code must not render raw `button`, `input`, `select`, `textarea`, 
 ## Enforcement
 
 - `bun run lint` uses Biome to enforce UI import boundaries.
-- `bun run check:design` verifies product-specific tokens and controls; CI and `just check` run both.
+- `bun run check:design` verifies product-specific tokens and controls; CI and `bun run check` run both.
 - The guard verifies the canonical registry/configuration, required shadcn primitives, and the absence of raw controls in feature React code.
 - The guard rejects unregistered typography sizes across feature code, entry points, settings, and shared UI.
 - React feature code, including content-script modals, uses `components/ui`. Only DOM injection into host-owned markup is exempt.
